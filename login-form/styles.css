@@ -1,0 +1,320 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --sky-top: #b9daf6;
+  --sky-mid: #d9ecf9;
+  --sky-bottom: #f2f7fb;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --card-border: rgba(255, 255, 255, 0.95);
+  --text: #111827;
+  --muted: #9ca3af;
+  --input-bg: #f3f4f6;
+  --input-border: transparent;
+  --icon: #9ca3af;
+  --btn: #1f2937;
+  --btn-hover: #111827;
+  --shadow: 0 22px 45px rgba(15, 23, 42, 0.12);
+  --radius-card: 16px;
+  --radius-input: 12px;
+  --radius-btn: 12px;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background: var(--sky-bottom);
+}
+
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    var(--sky-top) 0%,
+    var(--sky-mid) 42%,
+    var(--sky-bottom) 100%
+  );
+}
+
+.clouds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 120% 55% at 50% 108%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.55) 42%, transparent 70%),
+    radial-gradient(ellipse 70% 40% at 12% 92%, rgba(255, 255, 255, 0.75) 0%, transparent 55%),
+    radial-gradient(ellipse 65% 38% at 88% 90%, rgba(255, 255, 255, 0.7) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 28% at 35% 78%, rgba(255, 255, 255, 0.45) 0%, transparent 50%),
+    radial-gradient(ellipse 45% 26% at 72% 80%, rgba(255, 255, 255, 0.4) 0%, transparent 50%);
+}
+
+.halo {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: min(520px, 130vw);
+  height: min(340px, 85vw);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.top-brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 22px 0;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.top-brand__mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: #111827;
+  display: grid;
+  place-items: center;
+}
+
+.top-brand__name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+
+.main {
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 56px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 18px 32px;
+}
+
+.card {
+  width: min(360px, 100%);
+  padding: 26px 24px 22px;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.card__badge {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.card__title {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.card__subtitle {
+  margin: 0 auto 22px;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 280px;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  margin: 0;
+}
+
+.input-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 12px;
+  min-height: 46px;
+  border-radius: var(--radius-input);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.input-shell:focus-within {
+  background: #eef0f3;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.06);
+}
+
+.input-shell__icon {
+  flex-shrink: 0;
+  color: var(--icon);
+  display: grid;
+  place-items: center;
+}
+
+.input-shell input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--text);
+  padding: 12px 0;
+  outline: none;
+}
+
+.input-shell input::placeholder {
+  color: #b4bcc6;
+}
+
+.input-shell__eye {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-right: -4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.input-shell__eye:hover {
+  color: #6b7280;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.input-shell__eye[aria-pressed="true"] .icon-eye {
+  display: none;
+}
+
+.input-shell__eye[aria-pressed="true"] .icon-eye-off {
+  display: block;
+}
+
+.icon-eye-off {
+  display: none;
+}
+
+.form__row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.link-forgot {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+}
+
+.link-forgot:hover {
+  text-decoration: underline;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #dc2626;
+}
+
+.btn-primary {
+  margin-top: 4px;
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-btn);
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--btn);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.btn-primary:hover {
+  background: var(--btn-hover);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-primary:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.social-label {
+  margin: 18px 0 10px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #c4cad1;
+  font-weight: 500;
+}
+
+.social {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.social__btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.social__btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.social__btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.social__btn svg {
+  display: block;
+}
