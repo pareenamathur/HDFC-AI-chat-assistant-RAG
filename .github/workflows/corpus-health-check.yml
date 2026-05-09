@@ -94,20 +94,20 @@ jobs:
           else:
               print('::notice::ChromaDB index validation passed')
               print(f'Total chunks: {report[\"total_chunks\"]}')
-          import o"
-          s
-ndexer
+          "
 
-          # Check if ChromaDB data exists
-          if not os.path.exists('Milestone2/data/indexed'):
-              print('::otice::ChromaDB in dirctoy not found (skip retrieval check)')
-              sys.exit(0)
       - name: Run quick retrieval sanity check
         run: |
           python -c "
           import sys
+          import os
           sys.path.insert(0, 'Milestone2/phase1_ingestion_corpus_build/subphase1.6_indexer/src')
           from indexer import Indexer
+
+          # Check if ChromaDB data exists
+          if not os.path.exists('Milestone2/data/indexed'):
+              print('::notice::ChromaDB index directory not found (skip retrieval check)')
+              sys.exit(0)
 
           indexer = Indexer(
               persist_directory='Milestone2/data/indexed',
