@@ -1,0 +1,126 @@
+name: Corpus Health Check
+
+# Daily health check at 10:00 AM IST (4:30 AM UTC)
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+  STALE_THRESHOLD_DAYS: 30
+
+jobs:
+  health-check:
+    name: Corpus Freshness & Integrity Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check corpus freshness
+        id: freshness
+        run: |
+          python -c "
+          import json
+          import datetime
+          import sys
+          import os
+
+          threshold_days = int(os.environ.get('STALE_THRESHOLD_DAYS', 30))
+          manifest_path = 'data/corpus_version.json'
+
+          try:
+              with open(manifest_path, 'r') as f:
+                  manifest = json.load(f)
+              last_updated = datetime.datetime.fromisoformat(manifest['last_updated'])
+              age_days = (datetime.datetime.now(datetime.timezone.utc) - last_updated).days
+
+              print(f'Last corpus update: {last_updated.isoformat()}')
+              print(f'Corpus age: {age_days} days')
+              print(f'Stale threshold: {threshold_days} days')
+
+              if age_days > threshold_days:
+                  print(f'::error::Corpus is stale! Age: {age_days} days (threshold: {threshold_days})')
+                  sys.exit(1)
+              else:
+                  print(f'::notice::Corpus is fresh. Age: {age_days} days')
+                  # Set output for later steps
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                      f.write(f'stale=false\n')
+                      f.write(f'age_days={age_days}\n')
+          except FileNotFoundError:
+              print(f'::error::Corpus manifest not found at {manifest_path}')
+              sys.exit(1)
+          except Exception as e:
+              print(f'::error::Health check failed: {e}')
+              sys.exit(1)
+          "
+
+      - name: Validate ChromaDB index integrity
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'phase1_ingestion_corpus_build/subphase1.6_indexer/src')
+          from indexer import Indexer
+
+          indexer = Indexer(
+              persist_directory='data/indexed',
+              collection_name='mf_faq_corpus'
+          )
+          report = indexer.validate_index()
+
+          if not report['is_valid']:
+              print('::error::ChromaDB index validation failed')
+              for err in report['errors']:
+                  print(f'  - {err}')
+              sys.exit(1)
+          else:
+              print('::notice::ChromaDB index validation passed')
+              print(f'Total chunks: {report[\"total_chunks\"]}')
+          "
+
+      - name: Run quick retrieval sanity check
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'phase1_ingestion_corpus_build/subphase1.6_indexer/src')
+          from indexer import Indexer
+
+          indexer = Indexer(
+              persist_directory='data/indexed',
+              collection_name='mf_faq_corpus',
+              embedding_model_name='BAAI/bge-small-en-v1.5'
+          )
+
+          test_queries = [
+              'What is the expense ratio of HDFC Balanced Advantage Fund?',
+              'What is the exit load for HDFC Flexi Cap Fund?',
+          ]
+
+          for query in test_queries:
+              results = indexer.query_by_text(query, n_results=1)
+              if len(results['ids'][0]) == 0:
+                  print(f'::error::Retrieval failed for query: {query}')
+                  sys.exit(1)
+              sim = 1 - results['distances'][0][0]
+              print(f'  {query[:40]}... -> sim={sim:.4f} OK')
+
+          print('::notice::Retrieval sanity check passed')
+          "
+
+      - name: Health check summary
+        if: always()
+        run: |
+          echo "Health check completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Status: ${{ job.status }}"
