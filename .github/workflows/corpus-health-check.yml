@@ -38,7 +38,7 @@ jobs:
           import os
 
           threshold_days = int(os.environ.get('STALE_THRESHOLD_DAYS', 30))
-          manifest_path = 'data/corpus_version.json'
+          manifest_path = 'Milestone2/data/corpus_version.json'
 
           try:
               with open(manifest_path, 'r') as f:
@@ -71,11 +71,11 @@ jobs:
         run: |
           python -c "
           import sys
-          sys.path.insert(0, 'phase1_ingestion_corpus_build/subphase1.6_indexer/src')
+          sys.path.insert(0, 'Milestone2/phase1_ingestion_corpus_build/subphase1.6_indexer/src')
           from indexer import Indexer
 
           indexer = Indexer(
-              persist_directory='data/indexed',
+              persist_directory='Milestone2/data/indexed',
               collection_name='mf_faq_corpus'
           )
           report = indexer.validate_index()
@@ -94,11 +94,11 @@ jobs:
         run: |
           python -c "
           import sys
-          sys.path.insert(0, 'phase1_ingestion_corpus_build/subphase1.6_indexer/src')
+          sys.path.insert(0, 'Milestone2/phase1_ingestion_corpus_build/subphase1.6_indexer/src')
           from indexer import Indexer
 
           indexer = Indexer(
-              persist_directory='data/indexed',
+              persist_directory='Milestone2/data/indexed',
               collection_name='mf_faq_corpus',
               embedding_model_name='BAAI/bge-small-en-v1.5'
           )
