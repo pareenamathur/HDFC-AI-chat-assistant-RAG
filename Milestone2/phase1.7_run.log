@@ -1,0 +1,326 @@
+============================================================
+Phase 1.7 - Refresh & Health Run
+Started: 2026-05-08T06:42:55.082386+00:00
+Force refresh: False
+============================================================
+
+[Step 1] Running pre-refresh health check...
+Pre-refresh health check completed in 43.1s
+Overall passed: False
+Checks passed: 4/5
+  [PASS] freshness
+  [PASS] integrity
+  [PASS] metadata_coverage
+  [PASS] retrieval
+  [FAIL] urls
+
+[Step 2] Starting full Phase 1 pipeline refresh...
+
+Note: Skipping Phase 1.1 (Fetcher) - using existing HTML files.
+In production, Phase 1.1 would re-fetch URLs before extraction.
+
+
+============================================================
+Running: 1.2 Extract
+Script: C:\Users\paree\OneDrive\Desktop\Milestone2\phase1_ingestion_corpus_build\subphase1.2_extractor\src\run_extractor.py
+============================================================
+STDERR:
+INFO:__main__:Starting Phase 1.2 Extractor...
+INFO:__main__:Found 15 HTML files to process
+INFO:__main__:Processing: HDFC_Balanced_Advantage_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Balanced_Advantage_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 35350 characters from HTML
+INFO:__main__:Extracted: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_BSE_Sensex_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_BSE_Sensex_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 17641 characters from HTML
+INFO:__main__:Extracted: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Corporate_Bond_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Corporate_Bond_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 25759 characters from HTML
+INFO:__main__:Extracted: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Flexi_Cap_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Flexi_Cap_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 18223 characters from HTML
+INFO:__main__:Extracted: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Gold_ETF_Fund_of_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Gold_ETF_Fund_of_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 16014 characters from HTML
+INFO:__main__:Extracted: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Hybrid_Debt_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Hybrid_Debt_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 22333 characters from HTML
+INFO:__main__:Extracted: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Mid_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Mid_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 19027 characters from HTML
+INFO:__main__:Extracted: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Multi_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Multi_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 21228 characters from HTML
+INFO:__main__:Extracted: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_NIFTY50_Equal_Weight_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_NIFTY50_Equal_Weight_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 18500 characters from HTML
+INFO:__main__:Extracted: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_NIFTY_50_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_NIFTY_50_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 18656 characters from HTML
+INFO:__main__:Extracted: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Nifty_Top_20_Equal_Weight_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Nifty_Top_20_Equal_Weight_Index_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 16998 characters from HTML
+INFO:__main__:Extracted: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Pharma_And_Healthcare_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Pharma_And_Healthcare_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 16261 characters from HTML
+INFO:__main__:Extracted: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Short_Term_Debt_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Short_Term_Debt_Fund_Direct_Plan_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 22727 characters from HTML
+INFO:__main__:Extracted: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Silver_ETF_FoF_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Silver_ETF_FoF_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 16058 characters from HTML
+INFO:__main__:Extracted: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC_Small_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracting from HTML: c:\Users\paree\OneDrive\Desktop\Milestone2\data\html\HDFC_Small_Cap_Fund_Direct_Growth_-_NAV,_Mutual_Fund_Performance_&_Portfolio.html
+INFO:html_extractor:Extracted 19561 characters from HTML
+INFO:__main__:Extracted: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Extracted data saved to: c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed\extracted_data_phase1.2.json
+INFO:__main__:Phase 1.2 Extractor complete!
+
+Return code: 0
+
+[SUCCESS] 1.2 Extract completed.
+
+
+============================================================
+Running: 1.3 Clean
+Script: C:\Users\paree\OneDrive\Desktop\Milestone2\phase1_ingestion_corpus_build\subphase1.3_cleaner_normalizer\src\run_cleaner.py
+============================================================
+STDERR:
+INFO:__main__:Starting Phase 1.3 Cleaner & Normalizer...
+INFO:__main__:Loaded 15 documents from Phase 1.2
+INFO:__main__:Processing: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 35350 -> 34845 characters
+INFO:metadata_tagger:Tagging document: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 17641 -> 17441 characters
+INFO:metadata_tagger:Tagging document: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 25759 -> 25371 characters
+INFO:metadata_tagger:Tagging document: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 18223 -> 17986 characters
+INFO:metadata_tagger:Tagging document: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 16014 -> 15864 characters
+INFO:metadata_tagger:Tagging document: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 22333 -> 22041 characters
+INFO:metadata_tagger:Tagging document: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 19027 -> 18774 characters
+INFO:metadata_tagger:Tagging document: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 21228 -> 20933 characters
+INFO:metadata_tagger:Tagging document: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 18500 -> 18283 characters
+INFO:metadata_tagger:Tagging document: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 18656 -> 18433 characters
+INFO:metadata_tagger:Tagging document: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 16998 -> 16831 characters
+INFO:metadata_tagger:Tagging document: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 16261 -> 16092 characters
+INFO:metadata_tagger:Tagging document: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 22727 -> 22403 characters
+INFO:metadata_tagger:Tagging document: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 16058 -> 15907 characters
+INFO:metadata_tagger:Tagging document: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Processing: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:data_cleaner:Cleaning text...
+INFO:data_cleaner:Cleaned text: 19561 -> 19294 characters
+INFO:metadata_tagger:Tagging document: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned and tagged: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:__main__:Cleaned data saved to: c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed\cleaned_data_phase1.3.json
+INFO:__main__:Phase 1.3 Cleaner & Normalizer complete!
+
+Return code: 0
+
+[SUCCESS] 1.3 Clean completed.
+
+
+============================================================
+Running: 1.4 Chunk
+Script: C:\Users\paree\OneDrive\Desktop\Milestone2\phase1_ingestion_corpus_build\subphase1.4_chunker\src\run_chunker.py
+============================================================
+STDERR:
+INFO:__main__:Starting Phase 1.4 Chunker...
+INFO:__main__:Loaded 15 documents from Phase 1.3
+INFO:__main__:Chunking: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 47 -> 47 chunks
+INFO:chunker:Created 47 chunks
+INFO:__main__:Created 47 chunks
+INFO:__main__:Chunking: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 25 -> 25 chunks
+INFO:chunker:Created 25 chunks
+INFO:__main__:Created 25 chunks
+INFO:__main__:Chunking: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 35 -> 35 chunks
+INFO:chunker:Created 35 chunks
+INFO:__main__:Created 35 chunks
+INFO:__main__:Chunking: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 24 -> 24 chunks
+INFO:chunker:Created 24 chunks
+INFO:__main__:Created 24 chunks
+INFO:__main__:Chunking: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 23 -> 23 chunks
+INFO:chunker:Created 23 chunks
+INFO:__main__:Created 23 chunks
+INFO:__main__:Chunking: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 31 -> 31 chunks
+INFO:chunker:Created 31 chunks
+INFO:__main__:Created 31 chunks
+INFO:__main__:Chunking: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 26 -> 26 chunks
+INFO:chunker:Created 26 chunks
+INFO:__main__:Created 26 chunks
+INFO:__main__:Chunking: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 28 -> 28 chunks
+INFO:chunker:Created 28 chunks
+INFO:__main__:Created 28 chunks
+INFO:__main__:Chunking: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 26 -> 26 chunks
+INFO:chunker:Created 26 chunks
+INFO:__main__:Created 26 chunks
+INFO:__main__:Chunking: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 26 -> 26 chunks
+INFO:chunker:Created 26 chunks
+INFO:__main__:Created 26 chunks
+INFO:__main__:Chunking: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 24 -> 24 chunks
+INFO:chunker:Created 24 chunks
+INFO:__main__:Created 24 chunks
+INFO:__main__:Chunking: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 22 -> 22 chunks
+INFO:chunker:Created 22 chunks
+INFO:__main__:Created 22 chunks
+INFO:__main__:Chunking: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 30 -> 30 chunks
+INFO:chunker:Created 30 chunks
+INFO:__main__:Created 30 chunks
+INFO:__main__:Chunking: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 23 -> 23 chunks
+INFO:chunker:Created 23 chunks
+INFO:__main__:Created 23 chunks
+INFO:__main__:Chunking: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Chunking document: HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio
+INFO:chunker:Validated 26 -> 26 chunks
+INFO:chunker:Created 26 chunks
+INFO:__main__:Created 26 chunks
+INFO:__main__:Chunked data saved to: c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed\chunked_data_phase1.4.json
+INFO:__main__:Total chunks created: 416
+INFO:__main__:Phase 1.4 Chunker complete!
+
+Return code: 0
+
+[SUCCESS] 1.4 Chunk completed.
+
+
+============================================================
+Running: 1.5 Embed
+Script: C:\Users\paree\OneDrive\Desktop\Milestone2\phase1_ingestion_corpus_build\subphase1.5_embedder\src\run_embedder.py
+============================================================
+Phase 1.5 complete. See C:\Users\paree\OneDrive\Desktop\Milestone2\phase1.5_run.log for details.
+Return code: 0
+
+[SUCCESS] 1.5 Embed completed.
+
+
+============================================================
+Running: 1.6 Index
+Script: C:\Users\paree\OneDrive\Desktop\Milestone2\phase1_ingestion_corpus_build\subphase1.6_indexer\src\run_indexer.py
+============================================================
+Phase 1.6 complete. See C:\Users\paree\OneDrive\Desktop\Milestone2\phase1.6_run.log for details.
+Return code: 0
+
+[SUCCESS] 1.6 Index completed.
+
+
+Full pipeline completed in 231.9s
+
+[Step 3] Running post-refresh health check...
+Post-refresh health check completed in 13.2s
+Overall passed: False
+  [PASS] freshness
+  [PASS] integrity
+  [PASS] metadata_coverage
+  [PASS] retrieval
+  [FAIL] urls
+
+[Step 4] Updating version tracking...
+Version saved: corpus-v2026.05.1
+Total chunks: 832
+Unique schemes: 15
+
+============================================================
+Phase 1.7 Complete
+  Pre-health: FAIL
+  Pipeline: ALL PASSED
+  Post-health: FAIL
+  Version: corpus-v2026.05.1
+  Chunks: 832
+  Schemes: 15
+  Health report: C:\Users\paree\OneDrive\Desktop\Milestone2\data\health_report_latest.json
+  Version manifest: C:\Users\paree\OneDrive\Desktop\Milestone2\data\corpus_version.json
+  Total elapsed: 288.5s
+============================================================

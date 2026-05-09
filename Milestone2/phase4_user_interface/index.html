@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HDFC Mutual Fund FAQ Assistant — Groww</title>
+<meta name="description" content="Ask factual questions about HDFC Mutual Fund schemes. Powered by Groww RAG Engine."/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: #0D0D0D; }
+  ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 10px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Typing animation */
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  .dot { width:7px; height:7px; background:#00D09C; border-radius:50%; animation: bounce 1.2s infinite; }
+  .dot:nth-child(2) { animation-delay:.2s; }
+  .dot:nth-child(3) { animation-delay:.4s; }
+
+  /* Pulse */
+  @keyframes ping { 75%,100%{transform:scale(2);opacity:0} }
+  .animate-ping { animation: ping 1.5s cubic-bezier(0,0,.2,1) infinite; }
+
+  /* Message slide-in */
+  @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .msg-in { animation: slideUp .2s ease-out forwards; }
+
+  /* Markdown inside assistant bubble */
+  .assistant-content p { margin-bottom: .5rem; }
+  .assistant-content strong { color: #00D09C; }
+  .assistant-content ul { list-style: disc; padding-left: 1.2rem; }
+  .assistant-content code { background:#242424; border-radius:4px; padding:1px 5px; font-size:.85em; }
+
+  /* History panel */
+  #history-panel {
+    position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+    background: #151515; border-left: 1px solid #2A2A2A;
+    z-index: 200; transition: right .3s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column;
+  }
+  #history-panel.open { right: 0; }
+  #history-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    z-index: 199; display: none; backdrop-filter: blur(2px);
+  }
+  #history-overlay.open { display: block; }
+  .hist-item {
+    border: 1px solid #2A2A2A; border-radius: 10px; padding: 12px 14px;
+    cursor: pointer; transition: border-color .15s, background .15s;
+    background: #1C1C1E;
+  }
+  .hist-item:hover { border-color: #00D09C; background: #1C1C1E; }
+  .hist-item.active { border-color: #00D09C; background: rgba(0,208,156,.07); }
+</style>
+<script>
+  tailwind.config = {
+    darkMode:"class",
+    theme:{ extend:{
+      colors:{
+        "bg":"#0D0D0D","surface":"#1C1C1E","surface-low":"#151515",
+        "surface-high":"#242424","surface-highest":"#2A2A2A",
+        "border":"#2A2A2A","primary":"#00D09C","primary-dim":"#00B589",
+        "on-primary":"#0D0D0D","on-surface":"#F5F5F5","muted":"#A0A0A0",
+        "placeholder":"#505050","amber":"#F5A623","danger":"#FF4D4D"
+      },
+      maxWidth:{"chat":"800px"}
+    }}
+  }
+</script>
+</head>
+<body class="bg-bg text-on-surface flex flex-col h-screen overflow-hidden">
+
+<!-- ① Disclaimer strip -->
+<div class="shrink-0 bg-amber/10 border-b border-amber/30 px-4 py-2 flex items-center justify-center gap-2 z-50">
+  <span class="material-symbols-outlined text-amber text-[16px]">warning</span>
+  <p class="text-[11px] font-semibold text-amber tracking-wide">Important: Facts-only assistant. No investment advice provided.</p>
+</div>
+
+<!-- ② Header -->
+<header class="shrink-0 bg-surface-low border-b border-border px-5 py-3 flex justify-between items-center z-40">
+  <div class="flex items-center gap-3">
+    <div class="w-9 h-9 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center">
+      <span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings:'FILL' 1">shield</span>
+    </div>
+    <div>
+      <h1 class="text-[17px] font-bold text-primary leading-tight">HDFC Assistant</h1>
+      <p class="text-[10px] font-medium text-muted tracking-widest uppercase">Corpus: May 2025</p>
+    </div>
+  </div>
+  <div id="status-indicator" class="flex items-center gap-2 bg-surface-highest px-3 py-1.5 rounded-full border border-border text-[12px] font-medium text-muted">
+    <span class="relative flex h-2 w-2">
+      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+      <span class="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
+    </span>
+    Connecting…
+  </div>
+</header>
+
+<!-- ③ Main: sidebar + chat -->
+<main class="flex-1 flex overflow-hidden">
+
+  <!-- Sidebar (desktop only) -->
+  <aside class="hidden md:flex flex-col w-56 shrink-0 bg-surface-low border-r border-border p-4 gap-1">
+    <button onclick="clearChat()" class="w-full flex items-center gap-2 px-3 py-2 bg-primary text-on-primary rounded-lg font-semibold text-[13px] hover:bg-primary-dim transition-colors mb-3">
+      <span class="material-symbols-outlined text-[18px]">add_comment</span> New Chat
+    </button>
+    <button onclick="openHistory()" class="w-full flex items-center gap-2 px-3 py-2 text-muted hover:bg-surface-highest rounded-lg text-[13px] transition-colors">
+      <span class="material-symbols-outlined text-[18px]">history</span> History
+    </button>
+    <button class="w-full flex items-center gap-2 px-3 py-2 text-muted hover:bg-surface-highest rounded-lg text-[13px] transition-colors">
+      <span class="material-symbols-outlined text-[18px]">trending_up</span> Market Insights
+    </button>
+    <button class="w-full flex items-center gap-2 px-3 py-2 text-muted hover:bg-surface-highest rounded-lg text-[13px] transition-colors">
+      <span class="material-symbols-outlined text-[18px]">settings</span> Settings
+    </button>
+    <div class="mt-auto border-t border-border pt-4">
+      <p class="text-[10px] text-placeholder text-center">Powered by Groww RAG Engine</p>
+    </div>
+  </aside>
+
+  <!-- Chat column -->
+  <section class="flex-1 flex flex-col overflow-hidden bg-bg">
+
+    <!-- Scrollable messages -->
+    <div id="chat-window" class="flex-1 overflow-y-auto px-4 py-6">
+      <div class="max-w-chat mx-auto w-full space-y-5">
+
+        <!-- Welcome state -->
+        <div id="welcome-screen" class="flex flex-col items-center justify-center text-center pt-10 pb-6">
+          <div class="w-16 h-16 bg-surface rounded-2xl border border-border flex items-center justify-center mb-5">
+            <span class="material-symbols-outlined text-primary text-[38px]" style="font-variation-settings:'FILL' 1">account_balance</span>
+          </div>
+          <h2 class="text-[22px] font-bold text-on-surface mb-2">Ask me anything about HDFC Mutual Funds</h2>
+          <p class="text-[14px] text-muted mb-8">Expense ratios · NAV · Exit loads · AUM · Risk levels — all facts, always cited.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl">
+            <button onclick="quickQuery('What is the expense ratio of HDFC Flexi Cap?')"
+              class="p-4 bg-surface border border-border rounded-xl hover:border-primary text-left transition-colors group">
+              <p class="text-[11px] font-semibold text-primary uppercase mb-1">Fees</p>
+              <p class="text-[13px] text-on-surface">"What is the expense ratio of HDFC Flexi Cap?"</p>
+            </button>
+            <button onclick="quickQuery('Compare exit loads of HDFC Balanced Advantage and HDFC Small Cap Fund')"
+              class="p-4 bg-surface border border-border rounded-xl hover:border-primary text-left transition-colors group">
+              <p class="text-[11px] font-semibold text-primary uppercase mb-1">Compare</p>
+              <p class="text-[13px] text-on-surface">"Compare exit loads of HDFC Balanced Advantage and HDFC Small Cap"</p>
+            </button>
+            <button onclick="quickQuery('What is the minimum SIP for HDFC Nifty 50 Index Fund?')"
+              class="p-4 bg-surface border border-border rounded-xl hover:border-primary text-left transition-colors group">
+              <p class="text-[11px] font-semibold text-primary uppercase mb-1">SIP</p>
+              <p class="text-[13px] text-on-surface">"What is the minimum SIP for HDFC Nifty 50 Index Fund?"</p>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Quick chips + input bar -->
+    <div class="shrink-0 bg-surface-low border-t border-border px-4 py-3">
+      <div class="max-w-chat mx-auto space-y-3">
+
+        <!-- Quick chips -->
+        <div class="flex gap-2 overflow-x-auto no-scrollbar">
+          <button onclick="quickQuery('What is the expense ratio for HDFC Flexi Cap?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">Expense Ratio?</button>
+          <button onclick="quickQuery('What is the NAV of HDFC Balanced Advantage Fund?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">NAV?</button>
+          <button onclick="quickQuery('What is the exit load for HDFC Small Cap Fund?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">Exit Load?</button>
+          <button onclick="quickQuery('What is the AUM of HDFC Multi Cap Fund?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">AUM?</button>
+          <button onclick="quickQuery('What is the risk level of HDFC Pharma and Healthcare Fund?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">Risk Level?</button>
+          <button onclick="quickQuery('What is the minimum SIP for HDFC Gold ETF?')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">Min SIP?</button>
+          <button onclick="quickQuery('Compare expense ratios of HDFC Flexi Cap and HDFC Small Cap Fund')"
+            class="shrink-0 px-3 py-1.5 bg-surface border border-border rounded-full text-[12px] text-muted hover:border-primary hover:text-primary transition-colors">Compare Funds?</button>
+        </div>
+
+        <!-- Input row -->
+        <div class="relative flex items-center group">
+          <input id="user-input" type="text" autocomplete="off"
+            placeholder="Ask about any HDFC fund…"
+            class="w-full bg-surface-high border border-border group-focus-within:border-primary group-focus-within:ring-1 group-focus-within:ring-primary/40 rounded-full py-3 pl-5 pr-14 text-[14px] text-on-surface placeholder-placeholder focus:outline-none transition-all"/>
+          <button id="send-btn"
+            class="absolute right-1.5 w-10 h-10 bg-primary hover:bg-primary-dim active:scale-95 rounded-full flex items-center justify-center transition-all">
+            <span class="material-symbols-outlined text-on-primary text-[20px]" style="font-variation-settings:'FILL' 1">arrow_upward</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- History overlay -->
+<div id="history-overlay" onclick="closeHistory()"></div>
+
+<!-- History panel -->
+<div id="history-panel">
+  <!-- Panel header -->
+  <div class="flex items-center justify-between px-5 py-4 border-b border-[#2A2A2A] shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-[#00D09C] text-[20px]">history</span>
+      <h2 class="text-[15px] font-bold text-[#F5F5F5]">Chat History</h2>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="clearAllHistory()" title="Clear all" class="text-[11px] text-[#A0A0A0] hover:text-[#FF4D4D] transition-colors px-2 py-1 rounded">
+        Clear all
+      </button>
+      <button onclick="closeHistory()" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#2A2A2A] transition-colors">
+        <span class="material-symbols-outlined text-[#A0A0A0] text-[20px]">close</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Session list -->
+  <div id="history-list" class="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+    <!-- populated by JS -->
+  </div>
+
+  <!-- Panel footer -->
+  <div class="px-4 py-3 border-t border-[#2A2A2A] shrink-0">
+    <p class="text-[10px] text-[#505050] text-center">Sessions saved locally in your browser</p>
+  </div>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="md:hidden shrink-0 flex justify-around items-center bg-surface-high border-t border-border py-2 px-5">
+  <div class="flex flex-col items-center text-primary">
+    <span class="material-symbols-outlined text-[22px]" style="font-variation-settings:'FILL' 1">chat_bubble</span>
+    <span class="text-[10px] font-semibold">Assistant</span>
+  </div>
+  <div class="flex flex-col items-center text-muted">
+    <span class="material-symbols-outlined text-[22px]">account_balance_wallet</span>
+    <span class="text-[10px]">Portfolio</span>
+  </div>
+  <div class="flex flex-col items-center text-muted">
+    <span class="material-symbols-outlined text-[22px]">search</span>
+    <span class="text-[10px]">Explore</span>
+  </div>
+</nav>
+
+<script>
+  const API_URL = 'http://localhost:8000';
+  const chatWindow = document.getElementById('chat-window');
+  const userInput  = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const statusEl   = document.getElementById('status-indicator');
+  const welcomeEl  = document.getElementById('welcome-screen');
+
+  // ── Session / History state ──────────────────────────────────────────
+  const STORAGE_KEY = 'hdfc_chat_history';
+  let currentSessionId = null;   // ID of the active session being built
+  let currentMessages  = [];     // [{role, content, source}] for active session
+
+  function genId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+
+  function loadAllSessions() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function saveAllSessions(sessions) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  }
+
+  /** Persist / update the current session in localStorage */
+  function persistCurrentSession() {
+    if (!currentSessionId || currentMessages.length === 0) return;
+    const sessions = loadAllSessions();
+    const firstUser = currentMessages.find(m => m.role === 'user');
+    const title = firstUser ? firstUser.content.slice(0, 60) + (firstUser.content.length > 60 ? '…' : '') : 'Untitled session';
+    const preview = currentMessages[currentMessages.length - 1]?.content?.slice(0, 80) || '';
+    const idx = sessions.findIndex(s => s.id === currentSessionId);
+    const sessionObj = {
+      id: currentSessionId,
+      title,
+      preview,
+      timestamp: Date.now(),
+      messages: currentMessages,
+    };
+    if (idx >= 0) sessions[idx] = sessionObj;
+    else sessions.unshift(sessionObj);
+    // Keep max 50 sessions
+    saveAllSessions(sessions.slice(0, 50));
+  }
+
+  /** Start a fresh session (saves current one first) */
+  function newSession() {
+    persistCurrentSession();
+    currentSessionId = genId();
+    currentMessages  = [];
+  }
+
+  // ── History panel ────────────────────────────────────────────────────
+  function openHistory() {
+    persistCurrentSession();
+    renderHistoryList();
+    document.getElementById('history-panel').classList.add('open');
+    document.getElementById('history-overlay').classList.add('open');
+  }
+  function closeHistory() {
+    document.getElementById('history-panel').classList.remove('open');
+    document.getElementById('history-overlay').classList.remove('open');
+  }
+
+  function renderHistoryList() {
+    const list = document.getElementById('history-list');
+    const sessions = loadAllSessions();
+    if (sessions.length === 0) {
+      list.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-40 gap-3 text-center">
+          <span class="material-symbols-outlined text-[#505050] text-[36px]">history</span>
+          <p class="text-[13px] text-[#505050]">No saved chats yet.<br>Start asking questions!</p>
+        </div>`;
+      return;
+    }
+    list.innerHTML = '';
+    sessions.forEach(sess => {
+      const isActive = sess.id === currentSessionId;
+      const date = new Date(sess.timestamp);
+      const dateStr = date.toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+
+      const item = document.createElement('div');
+      item.className = 'hist-item' + (isActive ? ' active' : '');
+
+      item.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0" onclick="loadSession('${sess.id}')">
+            <p class="text-[13px] font-semibold text-[#F5F5F5] truncate">${escapeHtml(sess.title)}</p>
+            <p class="text-[11px] text-[#A0A0A0] truncate mt-0.5">${escapeHtml(sess.preview)}</p>
+            <p class="text-[10px] text-[#505050] mt-1.5 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[12px]">schedule</span>${dateStr}
+              · <span class="text-[#505050]">${sess.messages.length} msgs</span>
+            </p>
+          </div>
+          <button onclick="deleteSession(event,'${sess.id}')"
+            class="shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-[#FF4D4D]/20 text-[#505050] hover:text-[#FF4D4D] transition-colors mt-0.5">
+            <span class="material-symbols-outlined text-[16px]">delete</span>
+          </button>
+        </div>`;
+      list.appendChild(item);
+    });
+  }
+
+  function loadSession(sessId) {
+    const sessions = loadAllSessions();
+    const sess = sessions.find(s => s.id === sessId);
+    if (!sess) return;
+    closeHistory();
+
+    // Persist current before switching
+    persistCurrentSession();
+
+    // Switch
+    currentSessionId = sess.id;
+    currentMessages  = sess.messages;
+
+    // Re-render the chat window
+    const container = getMsgContainer();
+    container.innerHTML = '';
+    if (welcomeEl) welcomeEl.style.display = 'none';
+    sess.messages.forEach(m => {
+      if (m.role === 'user') appendMessage('user', m.content);
+      else if (m.status === 'refusal') appendRefusal(m.content);
+      else appendMessage('assistant', m.content, m.source);
+    });
+  }
+
+  function deleteSession(event, sessId) {
+    event.stopPropagation();
+    let sessions = loadAllSessions().filter(s => s.id !== sessId);
+    saveAllSessions(sessions);
+    // If deleted active session, start fresh
+    if (sessId === currentSessionId) {
+      currentSessionId = genId();
+      currentMessages  = [];
+      const container  = getMsgContainer();
+      container.innerHTML = '';
+      if (welcomeEl) welcomeEl.style.display = '';
+    }
+    renderHistoryList();
+  }
+
+  function clearAllHistory() {
+    if (!confirm('Clear all chat history? This cannot be undone.')) return;
+    saveAllSessions([]);
+    currentSessionId = genId();
+    currentMessages  = [];
+    renderHistoryList();
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function getMsgContainer() {
+    let c = chatWindow.querySelector('.max-w-chat');
+    if (!c) {
+      c = document.createElement('div');
+      c.className = 'max-w-chat mx-auto w-full space-y-5';
+      chatWindow.appendChild(c);
+    }
+    return c;
+  }
+
+  function appendMessage(role, content, source = null) {
+    if (welcomeEl) welcomeEl.style.display = 'none';
+    const container = getMsgContainer();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-in flex ' + (role === 'user' ? 'justify-end' : 'justify-start');
+
+    if (role === 'user') {
+      wrap.innerHTML = `
+        <div class="bg-primary text-on-primary px-4 py-2.5 rounded-[18px] rounded-tr-[4px] max-w-[72%] text-[14px] leading-relaxed font-medium">${escapeHtml(content)}</div>`;
+    } else {
+      // build assistant bubble
+      const bubble = document.createElement('div');
+      bubble.className = 'flex gap-3 max-w-[85%]';
+
+      // avatar
+      const avatar = `<div class="w-8 h-8 shrink-0 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center mt-1">
+        <span class="material-symbols-outlined text-primary text-[16px]" style="font-variation-settings:'FILL' 1">shield</span></div>`;
+
+      // message body
+      const body = document.createElement('div');
+      body.className = 'space-y-2';
+
+      const msgBox = document.createElement('div');
+      msgBox.className = 'bg-surface border-l-[3px] border-primary border border-border p-4 rounded-[4px_18px_18px_18px] shadow-sm';
+      const inner = document.createElement('div');
+      inner.className = 'assistant-content text-[14px] text-on-surface leading-relaxed';
+      inner.innerHTML = marked.parse(content);
+      msgBox.appendChild(inner);
+      body.appendChild(msgBox);
+
+      // Source chips
+      if (source) {
+        const chipRow = document.createElement('div');
+        chipRow.className = 'flex flex-wrap gap-2';
+        source.split(',').map(s => s.trim()).forEach((s, idx) => {
+          const chip = document.createElement('a');
+          chip.href = s;
+          chip.target = '_blank';
+          chip.className = 'flex items-center gap-1 px-2.5 py-1 bg-primary/10 border border-primary/30 rounded-full text-primary text-[11px] font-medium hover:bg-primary/20 transition-colors';
+          chip.innerHTML = `<span class="material-symbols-outlined text-[13px]">link</span> Source ${source.split(',').length > 1 ? idx + 1 : 'Documentation'}`;
+          chipRow.appendChild(chip);
+        });
+        body.appendChild(chipRow);
+      }
+
+      bubble.innerHTML = avatar;
+      bubble.appendChild(body);
+      wrap.appendChild(bubble);
+      container.appendChild(wrap);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+      return;
+    }
+
+    container.appendChild(wrap);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendRefusal(content) {
+    if (welcomeEl) welcomeEl.style.display = 'none';
+    const container = getMsgContainer();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-in flex justify-start';
+    wrap.innerHTML = `
+      <div class="flex gap-3 max-w-[85%]">
+        <div class="w-8 h-8 shrink-0 rounded-lg bg-amber/10 border border-amber/30 flex items-center justify-center mt-1">
+          <span class="material-symbols-outlined text-amber text-[16px]">block</span></div>
+        <div class="bg-[#1A1200] border-l-[3px] border-amber border border-amber/20 p-4 rounded-[4px_18px_18px_18px] text-[14px] text-on-surface leading-relaxed">
+          ${escapeHtml(content)}</div>
+      </div>`;
+    container.appendChild(wrap);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendError(content) {
+    if (welcomeEl) welcomeEl.style.display = 'none';
+    const container = getMsgContainer();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-in flex justify-start';
+    wrap.innerHTML = `
+      <div class="flex gap-3 max-w-[85%]">
+        <div class="w-8 h-8 shrink-0 rounded-lg bg-danger/10 border border-danger/30 flex items-center justify-center mt-1">
+          <span class="material-symbols-outlined text-danger text-[16px]">warning</span></div>
+        <div class="bg-[#1A0000] border-l-[3px] border-danger border border-danger/20 p-4 rounded-[4px_18px_18px_18px] text-[14px] text-on-surface leading-relaxed">
+          ${escapeHtml(content)}</div>
+      </div>`;
+    container.appendChild(wrap);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function makeTypingIndicator() {
+    const container = getMsgContainer();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-in flex justify-start';
+    wrap.innerHTML = `
+      <div class="flex gap-3">
+        <div class="w-8 h-8 shrink-0 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center mt-1">
+          <span class="material-symbols-outlined text-primary text-[16px]" style="font-variation-settings:'FILL' 1">shield</span></div>
+        <div class="bg-surface border-l-[3px] border-primary border border-border p-3.5 rounded-[4px_18px_18px_18px] flex items-center gap-2">
+          <div class="flex gap-1"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+          <span class="text-[12px] text-muted italic">Thinking…</span>
+        </div>
+      </div>`;
+    container.appendChild(wrap);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    return wrap;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Send ──────────────────────────────────────────────────────────────
+  async function handleSend() {
+    const query = userInput.value.trim();
+    if (!query) return;
+    userInput.value = '';
+    appendMessage('user', query);
+    currentMessages.push({ role: 'user', content: query });
+    const loader = makeTypingIndicator();
+
+    try {
+      const res  = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      const data = await res.json();
+      loader.remove();
+
+      if (data.status === 'refusal') {
+        appendRefusal(data.answer);
+        currentMessages.push({ role: 'assistant', content: data.answer, status: 'refusal', source: null });
+      } else {
+        appendMessage('assistant', data.answer, data.source);
+        currentMessages.push({ role: 'assistant', content: data.answer, source: data.source || null });
+      }
+      persistCurrentSession();
+    } catch (err) {
+      loader.remove();
+      appendError('Could not reach the backend. Make sure the server is running at http://localhost:8000');
+    }
+  }
+
+  function quickQuery(text) { userInput.value = text; handleSend(); }
+
+  function clearChat() {
+    newSession();  // saves current session, starts fresh
+    const c = getMsgContainer();
+    c.innerHTML = '';
+    if (welcomeEl) welcomeEl.style.display = '';
+  }
+
+  // Initialize first session on load
+  currentSessionId = genId();
+
+  sendBtn.onclick = handleSend;
+  userInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) handleSend(); });
+
+  // ── Health check ──────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const res  = await fetch(`${API_URL}/health`);
+      const data = await res.json();
+      if (data.status === 'healthy') {
+        statusEl.innerHTML = `
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+          </span>
+          <span class="text-primary">System Online (${data.schemes_loaded} Funds)</span>`;
+      }
+    } catch {
+      statusEl.innerHTML = `
+        <span class="relative flex h-2 w-2">
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
+        </span>
+        <span class="text-danger">Offline</span>`;
+    }
+  }
+  checkHealth();
+</script>
+</body>
+</html>

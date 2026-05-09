@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Groww HDFC Assistant</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0D0D0D; }
+        ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 10px; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#313030",
+                      "surface-container-highest": "#353534",
+                      "background": "#0D0D0D",
+                      "on-secondary": "#452b00",
+                      "on-secondary-fixed-variant": "#633f00",
+                      "surface-bright": "#3a3939",
+                      "error-container": "#93000a",
+                      "surface-container-high": "#2a2a2a",
+                      "on-tertiary-fixed-variant": "#713700",
+                      "on-secondary-container": "#4f3100",
+                      "inverse-surface": "#e5e2e1",
+                      "on-primary": "#003828",
+                      "surface-container-lowest": "#0e0e0e",
+                      "on-primary-fixed-variant": "#00513b",
+                      "secondary": "#ffb955",
+                      "surface-tint": "#2fe0aa",
+                      "surface-dim": "#131313",
+                      "outline-variant": "#3c4a43",
+                      "inverse-primary": "#006c4f",
+                      "on-tertiary-fixed": "#301400",
+                      "tertiary-fixed-dim": "#ffb785",
+                      "on-surface-variant": "#bacac1",
+                      "on-surface": "#e5e2e1",
+                      "on-primary-fixed": "#002116",
+                      "on-background": "#e5e2e1",
+                      "surface-variant": "#353534",
+                      "on-primary-container": "#00533c",
+                      "on-error-container": "#ffdad6",
+                      "on-secondary-fixed": "#291800",
+                      "primary": "#00D09C",
+                      "tertiary-container": "#ffa15b",
+                      "error": "#ffb4ab",
+                      "secondary-fixed": "#ffddb4",
+                      "secondary-fixed-dim": "#ffb955",
+                      "outline": "#2A2A2A",
+                      "on-tertiary-container": "#733800",
+                      "on-tertiary": "#502500",
+                      "surface-container-low": "#151515",
+                      "primary-fixed": "#59fdc5",
+                      "primary-container": "#00d09c",
+                      "surface-container": "#201f1f",
+                      "on-error": "#690005",
+                      "surface": "#1C1C1E",
+                      "tertiary": "#ffc8a3",
+                      "primary-fixed-dim": "#2fe0aa",
+                      "secondary-container": "#dc9100",
+                      "tertiary-fixed": "#ffdcc6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "lg": "24px",
+                      "container-max": "800px",
+                      "xl": "32px",
+                      "xs": "8px",
+                      "sm": "12px",
+                      "gutter": "16px",
+                      "md": "16px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "label-md": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "600"}],
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500"}]
+              }
+            },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-surface flex flex-col h-screen overflow-hidden">
+<!-- Top: Sticky Disclaimer Strip -->
+<div class="sticky top-0 z-[60] bg-[#F5A623]/10 border-b border-[#F5A623]/20 py-base text-center">
+<p class="text-label-sm font-label-sm text-[#F5A623] tracking-wide">
+            Important: Facts-only assistant
+        </p>
+</div>
+<!-- Header: TopAppBar -->
+<header class="bg-surface-container-low border-b border-outline px-md py-sm flex justify-between items-center w-full shrink-0">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-lg bg-primary-container/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary" data-icon="shield" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div>
+<h1 class="text-headline-md font-headline-md text-primary leading-tight">HDFC Assistant</h1>
+<p class="text-label-sm font-label-sm text-on-surface-variant tracking-widest">CORPUS: MAY 2025</p>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs bg-surface-container-high px-sm py-xs rounded-full border border-outline">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="text-label-md font-label-md text-on-surface">System Online (15 Funds)</span>
+</div>
+<div class="flex gap-xs">
+<button class="p-xs hover:bg-surface-container-highest rounded-lg transition-all">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="history">history</span>
+</button>
+<button class="p-xs hover:bg-surface-container-highest rounded-lg transition-all">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+</div>
+</header>
+<main class="flex-1 flex overflow-hidden">
+<!-- Sidebar: SideNavBar -->
+<aside class="hidden md:flex flex-col w-64 bg-surface-container-low border-r border-outline p-md shrink-0">
+<div class="space-y-base mb-xl">
+<button class="w-full flex items-center gap-sm p-sm bg-primary-container text-on-primary-container rounded-lg font-bold transition-all hover:opacity-90">
+<span class="material-symbols-outlined" data-icon="add_comment">add_comment</span>
+<span class="text-label-md">New Chat</span>
+</button>
+<nav class="space-y-base pt-md">
+<button class="w-full flex items-center gap-sm p-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-all">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="text-label-md">History</span>
+</button>
+<button class="w-full flex items-center gap-sm p-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-all">
+<span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+<span class="text-label-md">Market Insights</span>
+</button>
+<button class="w-full flex items-center gap-sm p-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-all">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-label-md">Settings</span>
+</button>
+</nav>
+</div>
+<div class="mt-auto border-t border-outline pt-md">
+<div class="bg-surface-container px-sm py-md rounded-xl border border-outline mb-md">
+<p class="text-label-sm font-bold text-primary mb-xs">Premium Tier</p>
+<p class="text-label-md text-on-surface-variant mb-md">Get real-time market data &amp; advanced fund analysis.</p>
+<button class="w-full py-sm bg-primary text-background font-bold rounded-full text-label-md">Upgrade Plan</button>
+</div>
+<div class="flex flex-col gap-xs">
+<button class="flex items-center gap-sm px-sm py-xs text-on-surface-variant hover:text-on-surface text-label-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="contact_support">contact_support</span>
+                        Support
+                    </button>
+<button class="flex items-center gap-sm px-sm py-xs text-on-surface-variant hover:text-on-surface text-label-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="policy">policy</span>
+                        Privacy
+                    </button>
+</div>
+</div>
+</aside>
+<!-- Chat Area -->
+<section class="flex-1 flex flex-col bg-background relative overflow-hidden">
+<div class="flex-1 overflow-y-auto px-md py-xl">
+<div class="max-w-container-max mx-auto w-full space-y-xl">
+<!-- Welcome State (Initially Centered) -->
+<!-- Note: This would typically hide once the conversation starts -->
+<div class="flex flex-col items-center justify-center text-center py-xl border-b border-outline/50 mb-xl">
+<div class="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center border border-outline mb-lg">
+<span class="material-symbols-outlined text-primary text-[40px]" data-icon="account_balance">account_balance</span>
+</div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface mb-xs">Ask me anything about HDFC Mutual Funds</h2>
+<p class="text-body-md font-body-md text-on-surface-variant max-w-md mb-xl">Accurate, data-driven insights from the May 2025 financial corpus. Compliant with current regulatory standards.</p>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md w-full">
+<button class="p-lg bg-surface-container-low border border-outline rounded-xl hover:border-primary transition-all text-left">
+<p class="text-label-md font-bold text-primary mb-xs">Performance</p>
+<p class="text-body-md text-on-surface">"Compare HDFC Top 100 vs NIFTY 50 5-year returns"</p>
+</button>
+<button class="p-lg bg-surface-container-low border border-outline rounded-xl hover:border-primary transition-all text-left">
+<p class="text-label-md font-bold text-primary mb-xs">Fees</p>
+<p class="text-body-md text-on-surface">"List expense ratios for all HDFC Hybrid funds"</p>
+</button>
+<button class="p-lg bg-surface-container-low border border-outline rounded-xl hover:border-primary transition-all text-left">
+<p class="text-label-md font-bold text-primary mb-xs">Allocation</p>
+<p class="text-body-md text-on-surface">"What is the equity exposure in HDFC Balanced Advantage?"</p>
+</button>
+</div>
+</div>
+<!-- Sample Conversation -->
+<div class="space-y-lg">
+<!-- User Message -->
+<div class="flex justify-end">
+<div class="bg-primary text-background px-lg py-sm rounded-2xl rounded-tr-base max-w-[80%] font-medium">
+                                What is the expense ratio of HDFC Flexi Cap?
+                            </div>
+</div>
+<!-- Assistant Message -->
+<div class="flex justify-start">
+<div class="flex gap-md max-w-[85%]">
+<div class="w-8 h-8 rounded-lg bg-primary-container/10 border border-primary/30 flex items-center justify-center shrink-0 mt-base">
+<span class="material-symbols-outlined text-primary text-[18px]" data-icon="shield" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div class="space-y-sm">
+<div class="bg-surface border-l-[3px] border-primary border-t border-r border-b border-outline p-lg rounded-2xl rounded-tl-base shadow-sm">
+<p class="text-body-lg font-body-lg text-on-surface">
+                                            The expense ratio for <span class="font-bold">HDFC Flexi Cap Fund (Direct Plan)</span> is <span class="text-primary font-bold">0.88%</span> as of May 2025.
+                                        </p>
+<div class="mt-md p-md bg-background rounded-lg border border-outline">
+<p class="text-label-sm text-on-surface-variant leading-relaxed">
+                                                For the Regular Plan, the expense ratio currently stands at 1.42%. This reflects the cost of fund management, administration, and marketing.
+                                            </p>
+</div>
+</div>
+<!-- Source Chips -->
+<div class="flex flex-wrap gap-xs">
+<div class="flex items-center gap-xs px-sm py-xs bg-surface-container-low border border-outline rounded-full text-on-surface-variant text-label-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="link">link</span>
+                                            Source Documentation
+                                        </div>
+<div class="flex items-center gap-xs px-sm py-xs bg-surface-container-low border border-outline rounded-full text-on-surface-variant text-label-md">
+<span class="material-symbols-outlined text-[14px]" data-icon="analytics">analytics</span>
+                                            Fact Sheet May '25
+                                        </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom: Input Area -->
+<div class="bg-surface-container-low border-t border-outline p-md relative">
+<div class="max-w-container-max mx-auto space-y-md">
+<!-- Quick Chips Scroll -->
+<div class="flex gap-xs overflow-x-auto pb-base no-scrollbar">
+<button class="shrink-0 px-md py-xs bg-surface-container border border-outline rounded-full text-label-md text-on-surface hover:border-primary transition-colors">Expense Ratio?</button>
+<button class="shrink-0 px-md py-xs bg-surface-container border border-outline rounded-full text-label-md text-on-surface hover:border-primary transition-colors">NAV?</button>
+<button class="shrink-0 px-md py-xs bg-surface-container border border-outline rounded-full text-label-md text-on-surface hover:border-primary transition-colors">Exit Load?</button>
+<button class="shrink-0 px-md py-xs bg-surface-container border border-outline rounded-full text-label-md text-on-surface hover:border-primary transition-colors">Top 10 Holdings?</button>
+<button class="shrink-0 px-md py-xs bg-surface-container border border-outline rounded-full text-label-md text-on-surface hover:border-primary transition-colors">Comparison?</button>
+</div>
+<!-- Input Bar -->
+<div class="relative flex items-center">
+<input class="w-full bg-background border border-outline rounded-full py-lg px-xl text-body-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" placeholder="Ask about HDFC funds, returns, or ratios..." type="text"/>
+<div class="absolute right-xs flex items-center gap-xs">
+<button class="p-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined" data-icon="attach_file">attach_file</span>
+</button>
+<button class="w-12 h-12 bg-primary text-background rounded-full flex items-center justify-center hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined font-bold" data-icon="arrow_upward">arrow_upward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Mobile Navigation -->
+<nav class="md:hidden flex justify-around items-center bg-surface-container-high border-t border-outline py-xs px-lg fixed bottom-0 left-0 w-full z-50">
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1">
+<span class="material-symbols-outlined" data-icon="chat_bubble" style="font-variation-settings: 'FILL' 1;">chat_bubble</span>
+<span class="text-label-sm font-label-sm">Assistant</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="text-label-sm font-label-sm">Portfolio</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+<span class="text-label-sm font-label-sm">Explore</span>
+</div>
+</nav>
+</body></html>

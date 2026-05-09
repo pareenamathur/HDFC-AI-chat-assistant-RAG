@@ -1,0 +1,32 @@
+# Phase 1.6 - Indexer Configuration
+
+# ChromaDB settings
+chromadb:
+  persist_directory: "../../data/indexed"
+  collection_name: "mf_faq_corpus"
+  distance_function: "cosine"  # cosine similarity for vector search
+
+# Embedding model (must match Phase 1.5)
+embedding_model: "BAAI/bge-small-en-v1.5"
+
+# Indexing settings
+batch_size: 500  # Chunks per batch (ChromaDB limit ~5000)
+
+# Input
+input_path: "../../data/processed/embedded_data_phase1.5.json"
+
+# Metadata indexes
+metadata_indexes:
+  - scheme_name
+  - document_type
+  - category
+  - section
+
+# Validation
+validation:
+  check_non_empty: true
+  check_metadata: true
+  check_embeddings: true
+  check_similarity_search: true
+  check_metadata_filtering: true
+  check_persistence: true

@@ -1,0 +1,58 @@
+============================================================
+Phase 1.5 - Embedder Run
+Started: 2026-05-08T12:13:45.522828
+============================================================
+Loaded 416 chunks from chunked_data_phase1.4.json
+Unique schemes: 15
+  - HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 25 chunks
+  - HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 47 chunks
+  - HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 35 chunks
+  - HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 24 chunks
+  - HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 23 chunks
+  - HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 31 chunks
+  - HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 26 chunks
+  - HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 28 chunks
+  - HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 26 chunks
+  - HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 26 chunks
+  - HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 24 chunks
+  - HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 22 chunks
+  - HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 30 chunks
+  - HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio: 23 chunks
+  - HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 26 chunks
+
+Initializing embedder with model: BAAI/bge-small-en-v1.5
+
+Generating embeddings (batch_size=64, enrich_with_structured_data=True)...
+Embedding completed in 192.6s (416 chunks, 0.463s/chunk)
+
+Validating embeddings...
+Validation Report:
+  Total chunks: 416
+  Valid chunks: 416
+  Dimension mismatches: 0
+  Zero-norm embeddings: 0
+  NaN/Inf values: 0
+  Missing metadata: 0
+  Dimension distribution: {384: 416}
+  Overall valid: True
+
+Similarity sanity check:
+  Same-doc (hdfc_html_a20c8b0d...): cos_sim=0.9321
+  Same-doc (hdfc_html_0e9335be...): cos_sim=0.9410
+  Same-doc (hdfc_html_a21d9601...): cos_sim=0.9544
+  Diff-doc (hdfc_html_a20c8... vs hdfc_html_0e933...): cos_sim=0.9486
+  Avg same-doc similarity: 0.9425
+  Avg diff-doc similarity: 0.9486
+
+Saving embedded data to embedded_data_phase1.5.json...
+Saved 416 embedded chunks (5.3 MB)
+
+============================================================
+Phase 1.5 Complete
+  Chunks processed: 416
+  Embedding model: BAAI/bge-small-en-v1.5
+  Embedding dimensions: 384
+  Validation: PASSED
+  Output: C:\Users\paree\OneDrive\Desktop\Milestone2\data\processed\embedded_data_phase1.5.json
+  Elapsed: 192.6s
+============================================================

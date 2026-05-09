@@ -1,0 +1,64 @@
+# Whitelisted Groww URLs for HDFC Mutual Fund Schemes
+# This file contains the 15 HDFC mutual fund scheme URLs to be processed by the fetcher
+# Covers: Index, Large-cap, Flexi-cap, Mid-cap, Small-cap, Sectoral, Debt, Hybrid, Commodity FoF
+
+urls:
+  - url: https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-growth
+    name: HDFC Balanced Advantage Fund
+    category: Hybrid (Dynamic Asset Allocation)
+
+  - url: https://groww.in/mutual-funds/hdfc-bse-sensex-index-fund-direct-growth
+    name: HDFC BSE Sensex Index Fund
+    category: Index Fund (Large-cap)
+
+  - url: https://groww.in/mutual-funds/hdfc-corporate-bond-fund-direct-plan-growth
+    name: HDFC Corporate Bond Fund
+    category: Debt (Corporate Bond)
+
+  - url: https://groww.in/mutual-funds/hdfc-flexi-cap-direct-plan-growth
+    name: HDFC Flexi Cap Fund
+    category: Flexi-cap
+
+  - url: https://groww.in/mutual-funds/hdfc-gold-etf-fund-of-fund-direct-plan-growth
+    name: HDFC Gold ETF Fund of Fund
+    category: Fund of Fund (Commodity)
+
+  - url: https://groww.in/mutual-funds/hdfc-hybrid-debt-fund-direct-growth
+    name: HDFC Hybrid Debt Fund
+    category: Hybrid (Debt-oriented)
+
+  - url: https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth
+    name: HDFC Mid Cap Fund
+    category: Mid-cap
+
+  - url: https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth
+    name: HDFC Multi Cap Fund
+    category: Multi-cap
+
+  - url: https://groww.in/mutual-funds/hdfc-nifty50-equal-weight-index-fund-direct-growth
+    name: HDFC Nifty50 Equal Weight Index Fund
+    category: Index Fund (Large-cap)
+
+  - url: https://groww.in/mutual-funds/hdfc-nifty-50-index-fund-direct-growth
+    name: HDFC Nifty 50 Index Fund
+    category: Index Fund (Large-cap)
+
+  - url: https://groww.in/mutual-funds/hdfc-nifty-top-20-equal-weight-index-fund-direct-growth
+    name: HDFC Nifty Top 20 Equal Weight Index Fund
+    category: Index Fund (Large-cap)
+
+  - url: https://groww.in/mutual-funds/hdfc-pharma-and-healthcare-fund-direct-growth
+    name: HDFC Pharma and Healthcare Fund
+    category: Sectoral (Equity)
+
+  - url: https://groww.in/mutual-funds/hdfc-short-term-debt-fund-direct-plan-growth
+    name: HDFC Short Term Debt Fund
+    category: Debt (Short Duration)
+
+  - url: https://groww.in/mutual-funds/hdfc-silver-etf-fof-direct-growth
+    name: HDFC Silver ETF FOF
+    category: Fund of Fund (Commodity)
+
+  - url: https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth
+    name: HDFC Small Cap Fund
+    category: Small-cap

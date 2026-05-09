@@ -1,0 +1,9 @@
+Phase 1.1: 15 HTML files present in data/html/ (pre-fetched)
+Phase 1.2: Extracted 15 documents -> extracted_data_phase1.2.json (11.35s)
+Phase 1.3: Cleaned 15 documents -> cleaned_data_phase1.3.json (0.72s)
+Phase 1.4: Created 416 chunks -> chunked_data_phase1.4.json (0.17s)
+
+Total pipeline time: 12.29s
+
+--- Validation ---
+  All checks passed!

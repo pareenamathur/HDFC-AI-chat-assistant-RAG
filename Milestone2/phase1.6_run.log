@@ -1,0 +1,116 @@
+============================================================
+Phase 1.6 - Indexer Run
+Started: 2026-05-08T12:17:05.243901
+============================================================
+Loaded 416 embedded chunks from embedded_data_phase1.5.json
+Embedding dimensions found: {384}
+
+Initializing ChromaDB indexer...
+  Persist directory: C:\Users\paree\OneDrive\Desktop\Milestone2\data\indexed
+  Collection name: mf_faq_corpus
+  Embedding model: BAAI/bge-small-en-v1.5
+
+Indexing 416 chunks into ChromaDB...
+
+Indexing Report:
+  Total input chunks: 416
+  Indexed (new): 416
+  Skipped (existing): 0
+  Errors: 0
+  Batches processed: 1
+  Total in collection: 832
+  Elapsed: 1.27s
+
+Collection Statistics:
+  Collection name: mf_faq_corpus
+  Total chunks: 832
+  Embedding model: BAAI/bge-small-en-v1.5
+  Unique schemes: 15
+
+  Scheme distribution:
+    - HDFC BSE Sensex Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 50 chunks
+    - HDFC Balanced Advantage Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 94 chunks
+    - HDFC Corporate Bond Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 70 chunks
+    - HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 48 chunks
+    - HDFC Gold ETF Fund of Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 46 chunks
+    - HDFC Hybrid Debt Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 62 chunks
+    - HDFC Mid Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 52 chunks
+    - HDFC Multi Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 56 chunks
+    - HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 52 chunks
+    - HDFC NIFTY50 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 52 chunks
+    - HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 48 chunks
+    - HDFC Pharma And Healthcare Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 44 chunks
+    - HDFC Short Term Debt Fund Direct Plan Growth - NAV, Mutual Fund Performance & Portfolio: 60 chunks
+    - HDFC Silver ETF FoF Direct Growth - NAV, Mutual Fund Performance & Portfolio: 46 chunks
+    - HDFC Small Cap Fund Direct Growth - NAV, Mutual Fund Performance & Portfolio: 52 chunks
+
+  Category distribution:
+    - Debt Corporate Bond: 70 chunks
+    - Debt Short Duration: 60 chunks
+    - Equity Flexi Cap: 48 chunks
+    - Equity Mid Cap: 52 chunks
+    - Equity Multi Cap: 56 chunks
+    - Equity Small Cap: 52 chunks
+    - Fund Of Fund: 92 chunks
+    - Hybrid Dynamic Asset Allocation: 94 chunks
+    - Index Fund: 264 chunks
+    - Sectoral: 44 chunks
+
+Validating index...
+Validation Report:
+  Overall valid: True
+  - non_empty: PASS
+  - metadata_present: PASS
+  - embeddings_present: PASS
+  - documents_present: PASS
+  - similarity_search_works: PASS
+  - metadata_filtering_works: PASS
+  - persistence_directory_exists: PASS
+
+============================================================
+Test Queries (verifying retrieval quality):
+============================================================
+
+Query: 'What is the expense ratio of HDFC Balanced Advantage Fund?'
+  Result 1: sim=0.8336 | HDFC Balanced Advantage Fund Direct Growth - NAV, ... | hdfc_webp_dee91aa4_chunk_28
+  Result 2: sim=0.8336 | HDFC Balanced Advantage Fund Direct Growth - NAV, ... | hdfc_html_a20c8b0d_chunk_28
+  Result 3: sim=0.8307 | HDFC Balanced Advantage Fund Direct Growth - NAV, ... | hdfc_html_a20c8b0d_chunk_25
+
+Query: 'What is the exit load for HDFC Flexi Cap Fund?'
+  Result 1: sim=0.8520 | HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fu... | hdfc_webp_f0551032_chunk_7
+  Result 2: sim=0.8520 | HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fu... | hdfc_html_5dea54fd_chunk_7
+  Result 3: sim=0.8228 | HDFC Flexi Cap Direct Plan Growth - NAV, Mutual Fu... | hdfc_webp_f0551032_chunk_8
+
+Query: 'What is the risk level of HDFC Small Cap Fund?'
+  Result 1: sim=0.8720 | HDFC Small Cap Fund Direct Growth - NAV, Mutual Fu... | hdfc_webp_ca028687_chunk_11
+  Result 2: sim=0.8720 | HDFC Small Cap Fund Direct Growth - NAV, Mutual Fu... | hdfc_html_15a2e4e8_chunk_11
+  Result 3: sim=0.8679 | HDFC Small Cap Fund Direct Growth - NAV, Mutual Fu... | hdfc_webp_ca028687_chunk_25
+
+Query: 'Tell me about HDFC Gold ETF Fund'
+  Result 1: sim=0.8702 | HDFC Gold ETF Fund of Fund Direct Plan Growth - NA... | hdfc_webp_4c642dcd_chunk_7
+  Result 2: sim=0.8702 | HDFC Gold ETF Fund of Fund Direct Plan Growth - NA... | hdfc_html_46ebe744_chunk_7
+  Result 3: sim=0.8647 | HDFC Gold ETF Fund of Fund Direct Plan Growth - NA... | hdfc_html_46ebe744_chunk_10
+
+Query: 'What is the NAV of HDFC Nifty 50 Index Fund?'
+  Result 1: sim=0.8841 | HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutu... | hdfc_webp_ecb8a814_chunk_9
+  Result 2: sim=0.8841 | HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutu... | hdfc_html_9c4aa65d_chunk_9
+  Result 3: sim=0.8773 | HDFC NIFTY 50 Index Fund Direct Growth - NAV, Mutu... | hdfc_html_9c4aa65d_chunk_17
+
+============================================================
+Metadata Filtering Test:
+============================================================
+
+Filtered query: 'expense ratio' (scheme_name contains 'HDFC Corporate Bond')
+  Filter: scheme_name = 'HDFC Balanced Advantage Fund Direct Growth - NAV, ...'
+  Result 1: sim=0.6879 | scheme=HDFC Balanced Advantage Fund Direct Growth - NAV, ...
+  Result 2: sim=0.6879 | scheme=HDFC Balanced Advantage Fund Direct Growth - NAV, ...
+  Result 3: sim=0.6531 | scheme=HDFC Balanced Advantage Fund Direct Growth - NAV, ...
+
+============================================================
+Phase 1.6 Complete
+  Chunks indexed: 416
+  Total in collection: 832
+  ChromaDB path: C:\Users\paree\OneDrive\Desktop\Milestone2\data\indexed
+  Validation: PASSED
+  Elapsed: 1.6s
+============================================================

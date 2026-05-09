@@ -1,0 +1,50 @@
+# Mutual Fund FAQ Assistant - Project Dependencies
+# Phase 1.1 - Fetcher and beyond
+
+# Web Scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Configuration
+pyyaml>=6.0
+
+# PDF Processing (for Phase 1.2)
+PyMuPDF>=1.23.0
+unstructured>=0.10.0
+
+# OCR (for Phase 1.2 - fallback)
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Table Extraction (for Phase 1.2)
+camelot-py[cv]>=0.11.0
+
+# Embeddings (for Phase 1.5)
+# Uses ChromaDB's built-in SentenceTransformerEmbeddingFunction (ONNX runtime)
+# No separate torch/sentence-transformers install needed
+chromadb>=0.4.0
+onnxruntime>=1.14.0
+
+# Vector Database (for Phase 1.6)
+# ChromaDB already listed above for local persistence
+
+# Backend API (for Phase 3)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+
+# Frontend (for Phase 4)
+# React + Vite dependencies managed via npm
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+
+# Evaluation (for Phase 5)
+ragas>=0.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0

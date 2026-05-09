@@ -1,0 +1,24 @@
+# Fetcher Configuration Settings
+# This file contains configuration settings for the fetcher module
+
+# Request settings
+request_delay: 2.0  # Delay between requests in seconds (to avoid bot detection)
+timeout: 30  # Request timeout in seconds
+
+# User agent string
+user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+
+# Output directories
+output_dir: 'c:\\Users\\paree\\OneDrive\\Desktop\\Milestone2\\data\\html'  # Directory to save scraped HTML files
+download_dir: 'c:\\Users\\paree\\OneDrive\\Desktop\\Milestone2\\data\\documents'  # Directory to save downloaded PDF documents
+
+# Validation settings
+enable_checksum_validation: true  # Enable SHA-256 checksum validation for downloaded documents
+
+# Logging settings
+log_level: INFO  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+log_file: ../../logs/fetcher.log  # Log file path (create logs folder at project root if needed)
+
+# Retry settings
+max_retries: 3  # Maximum number of retries for failed requests
+retry_delay: 5  # Delay between retries in seconds

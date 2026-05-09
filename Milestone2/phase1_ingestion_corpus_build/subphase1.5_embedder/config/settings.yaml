@@ -1,0 +1,23 @@
+# Phase 1.5 - Embedder Configuration
+
+# Embedding model settings
+model:
+  name: "BAAI/bge-small-en-v1.5"
+  dimensions: 384
+  max_tokens: 512
+  normalize: true
+
+# Processing settings
+batch_size: 64
+enrich_with_structured_data: true
+
+# Paths
+input_path: "../../data/processed/chunked_data_phase1.4.json"
+output_path: "../../data/processed/embedded_data_phase1.5.json"
+
+# Validation
+validation:
+  check_dimensions: true
+  check_norm: true
+  check_nan_inf: true
+  check_metadata: true

@@ -1,0 +1,37 @@
+# Phase 1.7 - Refresh & Health Configuration
+
+# Health check settings
+health_checks:
+  stale_threshold_days: 30
+  min_similarity_threshold: 0.5
+  max_url_failure_rate_pct: 10
+
+# Paths
+corpus_version_path: "../../data/corpus_version.json"
+corpus_history_path: "../../data/corpus_version_history.json"
+chroma_persist_dir: "../../data/indexed"
+collection_name: "mf_faq_corpus"
+health_report_dir: "../../data"
+urls_config: "../../phase1_ingestion_corpus_build/subphase1.1_fetcher/config/urls.yaml"
+
+# Embedding model (must match Phase 1.5)
+embedding_model: "BAAI/bge-small-en-v1.5"
+
+# Refresh settings
+refresh:
+  skip_fetcher: true  # Skip Phase 1.1 in local runs (use existing HTML)
+  force_refresh: false
+  pipeline_timeout_seconds: 600
+
+# Test queries for retrieval sanity check
+test_queries:
+  - "What is the expense ratio of HDFC Balanced Advantage Fund?"
+  - "What is the exit load for HDFC Flexi Cap Fund?"
+  - "What is the risk level of HDFC Small Cap Fund?"
+  - "Tell me about HDFC Gold ETF Fund"
+  - "What is the NAV of HDFC Nifty 50 Index Fund?"
+
+# Version tracking
+versioning:
+  tag_prefix: "corpus-v"
+  save_history: true
