@@ -48,3 +48,4 @@ ragas>=0.1.0
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.66.0
+thefuzz>=0.20.0
