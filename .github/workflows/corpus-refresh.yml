@@ -17,7 +17,7 @@ on:
           - 'true'
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11'
   CHROMADB_DIR: './Milestone2/data/indexed'
 
 jobs:
@@ -39,7 +39,22 @@ jobs:
       - name: Install fetcher dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Verify critical imports
+        run: |
+          python -c "
+          import sys
+          print(f'Python version: {sys.version}')
+          import sentence_transformers
+          print('sentence_transformers import: OK')
+          import torch
+          print('torch import: OK')
+          import transformers
+          print('transformers import: OK')
+          import chromadb
+          print('chromadb import: OK')
+          "
 
       - name: Run Fetcher (Phase 1.1)
         run: |
@@ -86,7 +101,7 @@ jobs:
       - name: Install extractor dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Run Extractor (Phase 1.2)
         run: |
@@ -125,7 +140,7 @@ jobs:
       - name: Install cleaner dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Run Cleaner (Phase 1.3)
         run: |
@@ -164,7 +179,7 @@ jobs:
       - name: Install chunker dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Run Chunker (Phase 1.4)
         run: |
@@ -203,7 +218,7 @@ jobs:
       - name: Install embedder dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Run Embedder (Phase 1.5)
         run: |
@@ -242,7 +257,7 @@ jobs:
       - name: Install indexer dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Run Indexer (Phase 1.6)
         run: |

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11'
   STALE_THRESHOLD_DAYS: 30
 
 jobs:
@@ -26,7 +26,26 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Verify critical imports
+        run: |
+          python -c "
+          import sys
+          print(f'Python version: {sys.version}')
+
+          import sentence_transformers
+          print('sentence_transformers import: OK')
+
+          import torch
+          print('torch import: OK')
+
+          import transformers
+          print('transformers import: OK')
+
+          import chromadb
+          print('chromadb import: OK')
+          "
 
       - name: Check corpus freshness
         id: freshness
