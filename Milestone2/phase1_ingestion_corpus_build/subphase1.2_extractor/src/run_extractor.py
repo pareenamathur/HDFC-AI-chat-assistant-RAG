@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 def main():
     """Run the extractor to process HTML files."""
     logger.info("Starting Phase 1.2 Extractor...")
-    
+
     # Initialize extractor
     extractor = HTMLExtractor()
-    
-    # HTML files directory
-    html_dir = r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\html'
-    processed_dir = r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed'
+
+    # HTML files directory (relative to script location)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))), 'data', 'html')
+    processed_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))), 'data', 'processed')
     
     os.makedirs(processed_dir, exist_ok=True)
     

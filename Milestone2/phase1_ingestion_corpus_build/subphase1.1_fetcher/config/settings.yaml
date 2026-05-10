@@ -9,8 +9,8 @@ timeout: 30  # Request timeout in seconds
 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 # Output directories
-output_dir: 'c:\\Users\\paree\\OneDrive\\Desktop\\Milestone2\\data\\html'  # Directory to save scraped HTML files
-download_dir: 'c:\\Users\\paree\\OneDrive\\Desktop\\Milestone2\\data\\documents'  # Directory to save downloaded PDF documents
+output_dir: '../../../data/html'  # Directory to save scraped HTML files (relative to this config file)
+download_dir: '../../../data/documents'  # Directory to save downloaded PDF documents (relative to this config file)
 
 # Validation settings
 enable_checksum_validation: true  # Enable SHA-256 checksum validation for downloaded documents

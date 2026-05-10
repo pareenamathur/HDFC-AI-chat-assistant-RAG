@@ -36,8 +36,8 @@ class ConfigManager:
             'AppleWebKit/537.36 (KHTML, like Gecko) '
             'Chrome/91.0.4472.124 Safari/537.36'
         ),
-        'output_dir': r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\html',
-        'download_dir': r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\documents',
+        'output_dir': os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'data', 'html'),
+        'download_dir': os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'data', 'documents'),
         'enable_checksum_validation': True
     }
     

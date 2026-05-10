@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 def main():
     """Run the chunker to process cleaned data."""
     logger.info("Starting Phase 1.4 Chunker...")
-    
+
     # Initialize chunker
     chunker = Chunker(min_chunk_size=50, max_chunk_size=1000, chunk_overlap=100)
-    
-    # Processed data directory
-    processed_dir = r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed'
+
+    # Processed data directory (relative to script location)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    processed_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))), 'data', 'processed')
     
     # Load cleaned data from Phase 1.3
     input_file = os.path.join(processed_dir, 'cleaned_data_phase1.3.json')

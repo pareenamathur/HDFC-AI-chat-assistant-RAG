@@ -21,13 +21,14 @@ logger = logging.getLogger(__name__)
 def main():
     """Run the cleaner and normalizer to process extracted data."""
     logger.info("Starting Phase 1.3 Cleaner & Normalizer...")
-    
+
     # Initialize cleaner and tagger
     cleaner = DataCleaner()
     tagger = MetadataTagger()
-    
-    # Processed data directory
-    processed_dir = r'c:\Users\paree\OneDrive\Desktop\Milestone2\data\processed'
+
+    # Processed data directory (relative to script location)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    processed_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))), 'data', 'processed')
     
     # Load extracted data from Phase 1.2
     input_file = os.path.join(processed_dir, 'extracted_data_phase1.2.json')
