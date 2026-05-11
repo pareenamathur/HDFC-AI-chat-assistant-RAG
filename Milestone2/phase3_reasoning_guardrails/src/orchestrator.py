@@ -98,6 +98,9 @@ class RAGOrchestrator:
         refusal_keywords = ["don't know", "do not have enough information", "not found", "cannot answer"]
         is_refusal = any(kw in answer.lower() for kw in refusal_keywords)
 
+        # Strip ALL URLs from the answer to prevent broken links
+        clean_answer = re.sub(r'https?://\S+', '', answer).strip()
+        
         # Extract source information from chunk metadata
         source_info = None
         source_link = None
@@ -139,8 +142,6 @@ class RAGOrchestrator:
         
         # Apply user constraint: If we don't know, no source info.
         if is_refusal:
-            # Strip URLs if LLM included them by mistake
-            clean_answer = re.sub(r'https?://\S+', '', answer).strip()
             return {
                 "answer": clean_answer,
                 "source": None,
@@ -150,12 +151,12 @@ class RAGOrchestrator:
             }
 
         # Ensure sentence count (crude split) - allow 4 for multi-fund
-        sentences = re.split(r'(?<=[.!?])\s+', answer.strip())
+        sentences = re.split(r'(?<=[.!?])\s+', clean_answer.strip())
         if len(sentences) > 4:
-            answer = " ".join(sentences[:4])
+            clean_answer = " ".join(sentences[:4])
 
         return {
-            "answer": answer,
+            "answer": clean_answer,
             "source": source_info,
             "source_link": source_link,
             "last_updated": last_updated,
