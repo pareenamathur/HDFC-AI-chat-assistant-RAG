@@ -254,25 +254,47 @@ def initialize_session_state():
     if 'show_welcome' not in st.session_state:
         st.session_state.show_welcome = True
 
+@st.cache_data
+def get_scheme_names():
+    """Load scheme names from chunked data with caching."""
+    chunked_data_path = os.path.join(BASE, 'data', 'processed', 'chunked_data_phase1.4.json')
+    if os.path.exists(chunked_data_path):
+        with open(chunked_data_path, 'r', encoding='utf-8') as f:
+            chunks = json.load(f)
+        scheme_names_list = sorted(list(set(c['scheme_name'] for c in chunks)))
+        logger.info(f"Loaded {len(scheme_names_list)} schemes")
+        return scheme_names_list
+    return []
+
+@st.cache_resource
+def get_orchestrator(scheme_names):
+    """Create and cache the RAG orchestrator with memory optimization."""
+    persist_dir = os.path.join(BASE, 'data', 'indexed')
+    
+    # Use environment variables to control memory-intensive features
+    use_bm25 = os.getenv('USE_BM25', 'false').lower() == 'true'
+    use_reranker = os.getenv('USE_RERANKER', 'false').lower() == 'true'
+    
+    logger.info(f"Initializing orchestrator with BM25: {use_bm25}, Reranker: {use_reranker}")
+    
+    orch = RAGOrchestrator(
+        persist_directory=persist_dir,
+        scheme_names=scheme_names,
+        use_bm25=use_bm25,
+        use_reranker=use_reranker
+    )
+    logger.info("Orchestrator initialized and cached")
+    return orch
+
 def initialize_orchestrator():
-    """Initialize the RAG orchestrator with error handling."""
+    """Initialize the RAG orchestrator with error handling and caching."""
     if st.session_state.orchestrator is None:
         try:
-            # Load schemes from chunked data
-            chunked_data_path = os.path.join(BASE, 'data', 'processed', 'chunked_data_phase1.4.json')
-            if os.path.exists(chunked_data_path):
-                with open(chunked_data_path, 'r', encoding='utf-8') as f:
-                    chunks = json.load(f)
-                scheme_names_list = sorted(list(set(c['scheme_name'] for c in chunks)))
-            else:
-                scheme_names_list = []
+            # Load schemes from cached function
+            scheme_names_list = get_scheme_names()
             
-            # Initialize orchestrator
-            persist_dir = os.path.join(BASE, 'data', 'indexed')
-            st.session_state.orchestrator = RAGOrchestrator(
-                persist_directory=persist_dir,
-                scheme_names=scheme_names_list
-            )
+            # Initialize orchestrator with caching
+            st.session_state.orchestrator = get_orchestrator(scheme_names_list)
             st.session_state.schemes = scheme_names_list
             logger.info("Orchestrator initialized successfully")
             return True

@@ -18,7 +18,9 @@ class HybridRetriever:
         embedding_model_name: str = "BAAI/bge-small-en-v1.5",
         reranker_model_name: str = "BAAI/bge-reranker-base",
         vector_weight: float = 0.7,
-        bm25_weight: float = 0.3
+        bm25_weight: float = 0.3,
+        use_bm25: bool = True,
+        use_reranker: bool = True
     ):
         self.persist_directory = persist_directory
         self.collection_name = collection_name
@@ -26,6 +28,8 @@ class HybridRetriever:
         self.reranker_model_name = reranker_model_name
         self.vector_weight = vector_weight
         self.bm25_weight = bm25_weight
+        self.use_bm25 = use_bm25
+        self.use_reranker = use_reranker
 
         # Initialize ChromaDB
         self.client = chromadb.PersistentClient(path=persist_directory)
@@ -35,12 +39,20 @@ class HybridRetriever:
         from sentence_transformers import SentenceTransformer
         self.embedding_model = SentenceTransformer(embedding_model_name)
 
-        # Initialize Reranker
-        logger.info(f"Loading reranker: {reranker_model_name}")
-        self.reranker = CrossEncoder(reranker_model_name)
+        # Initialize Reranker (optional for memory savings)
+        self.reranker = None
+        if use_reranker:
+            logger.info(f"Loading reranker: {reranker_model_name}")
+            self.reranker = CrossEncoder(reranker_model_name)
+        else:
+            logger.info("Reranker disabled for memory savings")
 
-        # Initialize BM25
-        self._initialize_bm25()
+        # Initialize BM25 (optional for memory savings)
+        if use_bm25:
+            self._initialize_bm25()
+        else:
+            logger.info("BM25 disabled for memory savings")
+            self.bm25 = None
 
     def _initialize_bm25(self):
         """Builds BM25 index from all chunks in the collection."""
@@ -80,7 +92,7 @@ class HybridRetriever:
         # 1. Vector Search
         vector_results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k_hybrid,
+            n_results=top_k_hybrid if not self.use_reranker else min(top_k_hybrid, 50),
             where=filters,
             include=["documents", "metadatas", "distances"]
         )
@@ -96,47 +108,55 @@ class HybridRetriever:
                     "score": 1 - vector_results["distances"][0][i] # Normalize to 0-1
                 })
 
-        # 2. BM25 Search
-        tokenized_query = query.lower().split()
-        bm25_scores = self.bm25.get_scores(tokenized_query)
-        
-        # Normalize BM25 scores (simple max normalization)
-        max_bm25 = max(bm25_scores) if len(bm25_scores) > 0 and max(bm25_scores) > 0 else 1
-        
-        # Combine results
-        combined_results = {}
-        
-        # Start with vector hits
-        for hit in vector_hits:
-            combined_results[hit["id"]] = hit
-            combined_results[hit["id"]]["hybrid_score"] = hit["score"] * self.vector_weight
+        # 2. BM25 Search (if enabled)
+        if self.use_bm25 and self.bm25:
+            tokenized_query = query.lower().split()
+            bm25_scores = self.bm25.get_scores(tokenized_query)
+            
+            # Normalize BM25 scores (simple max normalization)
+            max_bm25 = max(bm25_scores) if len(bm25_scores) > 0 and max(bm25_scores) > 0 else 1
+            
+            # Combine results
+            combined_results = {}
+            
+            # Start with vector hits
+            for hit in vector_hits:
+                combined_results[hit["id"]] = hit
+                combined_results[hit["id"]]["hybrid_score"] = hit["score"] * self.vector_weight
 
-        # Add BM25 scores to combined results (if the ID exists in filtered vector hits or if no filters)
-        # For simplicity, we'll just score the vector hits using BM25
-        for hit_id, hit in combined_results.items():
-            # Find index in full corpus
-            try:
-                idx = self.all_ids.index(hit_id)
-                bm25_score = bm25_scores[idx] / max_bm25
-                hit["hybrid_score"] += bm25_score * self.bm25_weight
-            except ValueError:
-                continue
+            # Add BM25 scores to combined results
+            for hit_id, hit in combined_results.items():
+                try:
+                    idx = self.all_ids.index(hit_id)
+                    bm25_score = bm25_scores[idx] / max_bm25
+                    hit["hybrid_score"] += bm25_score * self.bm25_weight
+                except ValueError:
+                    continue
 
-        # 3. Reranking
-        candidates = sorted(combined_results.values(), key=lambda x: x["hybrid_score"], reverse=True)[:top_k_hybrid]
-        
+            candidates = sorted(combined_results.values(), key=lambda x: x["hybrid_score"], reverse=True)[:top_k_hybrid]
+        else:
+            # Just use vector search results
+            candidates = vector_hits[:n_results]
+
         if not candidates:
             return []
 
-        # Prepare pairs for cross-encoder
-        pairs = [[query, c["text"]] for c in candidates]
-        rerank_scores = self.reranker.predict(pairs)
+        # 3. Reranking (if enabled)
+        if self.use_reranker and self.reranker:
+            pairs = [[query, c["text"]] for c in candidates]
+            rerank_scores = self.reranker.predict(pairs)
 
-        for i, candidate in enumerate(candidates):
-            candidate["rerank_score"] = float(rerank_scores[i])
+            for i, candidate in enumerate(candidates):
+                candidate["rerank_score"] = float(rerank_scores[i])
 
-        # Sort by rerank score
-        final_results = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)[:n_results]
+            # Sort by rerank score
+            final_results = sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)[:n_results]
+        else:
+            # Use vector/hybrid scores
+            if self.use_bm25:
+                final_results = sorted(candidates, key=lambda x: x["hybrid_score"], reverse=True)[:n_results]
+            else:
+                final_results = sorted(candidates, key=lambda x: x["score"], reverse=True)[:n_results]
         
         return final_results
 

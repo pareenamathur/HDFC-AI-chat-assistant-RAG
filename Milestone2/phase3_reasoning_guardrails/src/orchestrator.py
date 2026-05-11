@@ -20,11 +20,13 @@ logger = logging.getLogger(__name__)
 class RAGOrchestrator:
     """Orchestrates the full RAG pipeline."""
 
-    def __init__(self, persist_directory: str, scheme_names: list):
+    def __init__(self, persist_directory: str, scheme_names: list, use_bm25: bool = True, use_reranker: bool = True):
         self.qp = QueryProcessor(scheme_names)
         self.retriever = HybridRetriever(
             persist_directory=persist_directory,
-            collection_name="mf_faq_corpus"
+            collection_name="mf_faq_corpus",
+            use_bm25=use_bm25,
+            use_reranker=use_reranker
         )
         self.builder = ContextBuilder()
         self.generator = AnswerGenerator(get_llm_provider())
