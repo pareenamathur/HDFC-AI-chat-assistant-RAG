@@ -39,7 +39,7 @@ This document provides step-by-step instructions for deploying the Mutual Fund F
 Ensure your repository structure includes:
 ```
 Milestone2/
-├── streamlit_app.py              # Main Streamlit application
+├── streamlit_app.py              # Main Streamlit application (production-ready)
 ├── requirements_streamlit.txt    # Streamlit-specific dependencies
 ├── phase3_reasoning_guardrails/
 │   └── src/
@@ -57,6 +57,16 @@ Milestone2/
 └── .streamlit/
     └── config.toml              # Streamlit configuration
 ```
+
+**streamlit_app.py Features:**
+- Title: "Mutual Fund FAQ Assistant"
+- Disclaimer: "Facts-only. No investment advice."
+- Dark theme chat UI
+- Chat input with session state history
+- Displays answer, source link, and last updated date
+- Loading spinner during query processing
+- Graceful error handling
+- Uses existing RAG orchestrator without backend logic changes
 
 ---
 

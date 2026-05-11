@@ -22,7 +22,7 @@ logger = logging.getLogger("Streamlit_App")
 
 # Page configuration
 st.set_page_config(
-    page_title="HDFC Mutual Fund FAQ Assistant",
+    page_title="Mutual Fund FAQ Assistant",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -90,8 +90,11 @@ if 'orchestrator' not in st.session_state:
             st.session_state.schemes = []
 
 # Header
-st.markdown('<div class="main-header">HDFC Mutual Fund FAQ Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Mutual Fund FAQ Assistant</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Ask factual questions about HDFC Mutual Fund schemes</div>', unsafe_allow_html=True)
+
+# Disclaimer
+st.warning("⚠️ **Disclaimer**: Facts-only. No investment advice.")
 
 # Sidebar
 with st.sidebar:
@@ -106,13 +109,11 @@ with st.sidebar:
     
     st.header("ℹ️ About")
     st.write("""
-    This AI-powered assistant answers factual questions about HDFC Mutual Fund schemes using:
+    This AI-powered assistant answers factual questions about Mutual Fund schemes using:
     
     - **RAG Engine**: Retrieves relevant information from official documents
     - **Vector Search**: Uses semantic similarity to find accurate answers
     - **LLM Integration**: Generates natural language responses
-    
-    Powered by Groww RAG Engine
     """)
     
     st.divider()
@@ -138,6 +139,18 @@ for message in st.session_state.messages:
             st.markdown(f'<div class="stChatMessage user-message">{message["content"]}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="stChatMessage assistant-message">{message["content"]}</div>', unsafe_allow_html=True)
+            # Display source information for history
+            if 'source' in message or 'source_link' in message or 'last_updated' in message:
+                st.divider()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if message.get('source_link'):
+                        st.markdown(f"📄 **Source**: [Link]({message['source_link']})")
+                    elif message.get('source'):
+                        st.markdown(f"📄 **Source**: {message['source']}")
+                with col2:
+                    if message.get('last_updated'):
+                        st.markdown(f"🕐 **Last Updated**: {message['last_updated']}")
 
 # Chat input
 if prompt := st.chat_input("Ask a question about HDFC Mutual Fund schemes..."):
@@ -158,19 +171,32 @@ if prompt := st.chat_input("Ask a question about HDFC Mutual Fund schemes..."):
                     if response and response.get('answer'):
                         answer = response['answer']
                         source = response.get('source', '')
+                        source_link = response.get('source_link', '')
+                        last_updated = response.get('last_updated', '')
                         
                         # Display answer
                         st.markdown(f'<div class="stChatMessage assistant-message">{answer}</div>', unsafe_allow_html=True)
                         
-                        # Display source if available
-                        if source:
-                            st.caption(f"📄 Source: {source}")
+                        # Display source information
+                        if source or source_link or last_updated:
+                            st.divider()
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if source_link:
+                                    st.markdown(f"📄 **Source**: [Link]({source_link})")
+                                elif source:
+                                    st.markdown(f"📄 **Source**: {source}")
+                            with col2:
+                                if last_updated:
+                                    st.markdown(f"🕐 **Last Updated**: {last_updated}")
                         
                         # Add to chat history
                         st.session_state.messages.append({
                             "role": "assistant",
                             "content": answer,
-                            "source": source
+                            "source": source,
+                            "source_link": source_link,
+                            "last_updated": last_updated
                         })
                     else:
                         st.markdown('<div class="stChatMessage assistant-message">Sorry, I could not find an answer to your question. Please try rephrasing it or ask about a specific HDFC Mutual Fund scheme.</div>', unsafe_allow_html=True)
