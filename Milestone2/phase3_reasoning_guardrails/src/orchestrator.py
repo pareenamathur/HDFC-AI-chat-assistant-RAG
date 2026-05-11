@@ -98,17 +98,54 @@ class RAGOrchestrator:
         refusal_keywords = ["don't know", "do not have enough information", "not found", "cannot answer"]
         is_refusal = any(kw in answer.lower() for kw in refusal_keywords)
 
-        # Extract ALL URLs if present
-        urls = re.findall(r'https?://\S+', answer)
-        primary_url = urls[0] if urls else None
+        # Extract source information from chunk metadata
+        source_info = None
+        source_link = None
+        last_updated = None
         
-        # Apply user constraint: If we don't know, no URL.
+        if results and len(results) > 0:
+            # Get the top result's metadata
+            top_result = results[0]
+            metadata = top_result.get("metadata", {})
+            
+            # Extract source information
+            scheme_name = metadata.get("scheme_name", "Unknown Scheme")
+            source_url = metadata.get("source_url", "")
+            
+            # Check if source_url is a local file or a valid URL
+            if source_url and not source_url.startswith("http"):
+                # It's a local file, don't use it as a link
+                source_info = scheme_name
+                source_link = None
+            elif source_url and source_url.startswith("http"):
+                # It's a valid URL
+                source_info = scheme_name
+                source_link = source_url
+            else:
+                # No source URL, just use scheme name
+                source_info = scheme_name
+                source_link = None
+            
+            # Get last updated date if available
+            created_at = metadata.get("created_at", "")
+            if created_at:
+                try:
+                    # Parse the datetime and format it
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    last_updated = dt.strftime("%Y-%m-%d")
+                except:
+                    last_updated = None
+        
+        # Apply user constraint: If we don't know, no source info.
         if is_refusal:
             # Strip URLs if LLM included them by mistake
             clean_answer = re.sub(r'https?://\S+', '', answer).strip()
             return {
                 "answer": clean_answer,
                 "source": None,
+                "source_link": None,
+                "last_updated": None,
                 "status": "refusal"
             }
 
@@ -116,14 +153,12 @@ class RAGOrchestrator:
         sentences = re.split(r'(?<=[.!?])\s+', answer.strip())
         if len(sentences) > 4:
             answer = " ".join(sentences[:4])
-            # Re-append URLs if they were in the later sentences
-            for url in urls:
-                if url not in answer:
-                    answer += f"\nSource: {url}"
 
         return {
             "answer": answer,
-            "source": ", ".join(urls) if urls else None,
+            "source": source_info,
+            "source_link": source_link,
+            "last_updated": last_updated,
             "status": "success"
         }
 
