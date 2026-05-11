@@ -46,18 +46,18 @@ def get_app_config():
 # =============================================================================
 
 def inject_custom_css():
-    """Inject custom CSS for modern AI assistant UI."""
+    """Inject custom CSS for modern AI assistant UI with dark finance theme."""
     st.markdown("""
     <style>
         /* Global styles */
         .stApp {
-            background-color: #ffffff;
+            background-color: #0a0e27;
         }
         
         /* Sidebar styles */
         .css-1d391kg {
-            background-color: #f8f9fa !important;
-            border-right: 1px solid #e9ecef !important;
+            background-color: #1a1f3a !important;
+            border-right: 1px solid #2d3a5c !important;
         }
         
         /* Chat container */
@@ -69,26 +69,28 @@ def inject_custom_css():
         
         /* User message bubble */
         .user-message {
-            background-color: #007bff;
-            color: white;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+            color: #ffffff;
             padding: 12px 16px;
             border-radius: 18px 18px 4px 18px;
             margin: 8px 0;
             max-width: 70%;
             margin-left: auto;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0, 212, 170, 0.3);
+            border: 1px solid #2d5a87;
         }
         
         /* Assistant message bubble */
         .assistant-message {
-            background-color: #f1f3f4;
-            color: #202124;
+            background-color: #1f2937;
+            color: #e5e7eb;
             padding: 12px 16px;
             border-radius: 18px 18px 18px 4px;
             margin: 8px 0;
             max-width: 70%;
             margin-right: auto;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #374151;
         }
         
         /* Welcome section */
@@ -100,13 +102,17 @@ def inject_custom_css():
         .welcome-title {
             font-size: 2.5rem;
             font-weight: 600;
-            color: #1a1a1a;
+            color: #00d4aa;
             margin-bottom: 12px;
+            background: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .welcome-subtitle {
             font-size: 1.1rem;
-            color: #666;
+            color: #9ca3af;
             margin-bottom: 32px;
         }
         
@@ -122,8 +128,8 @@ def inject_custom_css():
         }
         
         .suggestion-pill {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background-color: #1f2937;
+            border: 1px solid #374151;
             border-radius: 12px;
             padding: 16px;
             cursor: pointer;
@@ -132,37 +138,47 @@ def inject_custom_css():
         }
         
         .suggestion-pill:hover {
-            background-color: #e9ecef;
-            border-color: #dee2e6;
+            background-color: #2d3a5c;
+            border-color: #00d4aa;
             transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 212, 170, 0.4);
         }
         
         .suggestion-text {
-            color: #495057;
+            color: #e5e7eb;
             font-size: 0.95rem;
             font-weight: 500;
         }
         
         /* Disclaimer */
         .disclaimer {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
+            background-color: rgba(245, 158, 11, 0.15);
+            border-left: 4px solid #f59e0b;
             padding: 12px 16px;
             margin: 16px 0;
             border-radius: 4px;
             font-size: 0.9rem;
-            color: #856404;
+            color: #fbbf24;
         }
         
         /* Source information */
         .source-info {
-            background-color: #f8f9fa;
+            background-color: #1f2937;
             border-radius: 8px;
             padding: 12px;
             margin-top: 12px;
             font-size: 0.85rem;
-            color: #666;
+            color: #9ca3af;
+            border: 1px solid #374151;
+        }
+        
+        .source-info a {
+            color: #00d4aa;
+            text-decoration: none;
+        }
+        
+        .source-info a:hover {
+            text-decoration: underline;
         }
         
         /* Sidebar buttons */
@@ -188,10 +204,28 @@ def inject_custom_css():
             bottom: 0;
             left: 0;
             right: 0;
-            background: white;
+            background: #1a1f3a;
             padding: 16px;
-            border-top: 1px solid #e9ecef;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            border-top: 1px solid #2d3a5c;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Streamlit native elements dark theme */
+        .stTextInput > div > div > input {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            border: 1px solid #374151;
+        }
+        
+        .stButton > button {
+            background-color: #1e3a5f;
+            color: #ffffff;
+            border: 1px solid #2d5a87;
+        }
+        
+        .stButton > button:hover {
+            background-color: #2d5a87;
+            border-color: #00d4aa;
         }
     </style>
     """, unsafe_allow_html=True)
