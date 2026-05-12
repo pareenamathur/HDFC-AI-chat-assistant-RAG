@@ -29,3 +29,4 @@ groq>=0.4.0
 
 # Additional Utilities (minimal set for production)
 tqdm>=4.65.0
+thefuzz>=0.20.0
