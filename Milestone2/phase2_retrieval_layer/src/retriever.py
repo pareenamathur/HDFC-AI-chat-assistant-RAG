@@ -6,6 +6,16 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
+def get_memory_usage():
+    """Get current memory usage in MB."""
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        return memory_info.rss / 1024 / 1024  # Convert to MB
+    except ImportError:
+        return "Unknown (psutil not available)"
+
 logger = logging.getLogger(__name__)
 
 class HybridRetriever:
@@ -15,7 +25,7 @@ class HybridRetriever:
         self,
         persist_directory: str,
         collection_name: str = "mf_faq_corpus",
-        embedding_model_name: str = "BAAI/bge-small-en-v1.5",
+        embedding_model_name: str = "all-MiniLM-L6-v2",
         reranker_model_name: str = "BAAI/bge-reranker-base",
         vector_weight: float = 0.7,
         bm25_weight: float = 0.3,
@@ -36,8 +46,16 @@ class HybridRetriever:
         self.collection = self.client.get_collection(name=collection_name)
         
         # Initialize Embedding Model for manual embedding generation
+        logger.info(f"Loading embedding model: {embedding_model_name}")
+        before_model_memory = get_memory_usage()
+        logger.info(f"Memory before embedding model load: {before_model_memory} MB")
+        
         from sentence_transformers import SentenceTransformer
         self.embedding_model = SentenceTransformer(embedding_model_name)
+        
+        after_model_memory = get_memory_usage()
+        logger.info(f"Memory after embedding model load: {after_model_memory} MB")
+        logger.info(f"Embedding model loaded successfully: {embedding_model_name}")
 
         # Initialize Reranker (optional for memory savings)
         self.reranker = None

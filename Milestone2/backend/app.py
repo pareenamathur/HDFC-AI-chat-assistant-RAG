@@ -128,7 +128,13 @@ def lazy_initialize_orchestrator():
         logger.info("ChromaDB initialization status: STARTING")
         
         # Initialize with minimal memory footprint
-        orchestrator = get_orchestrator()(schemes, persist_dir, use_bm25, use_reranker)
+        RAGOrchestrator_class = get_orchestrator()
+        orchestrator = RAGOrchestrator_class(
+            persist_directory=persist_dir,
+            scheme_names=schemes,
+            use_bm25=use_bm25,
+            use_reranker=use_reranker
+        )
         
         # Log ChromaDB initialization complete
         logger.info("ChromaDB initialization status: COMPLETED")
