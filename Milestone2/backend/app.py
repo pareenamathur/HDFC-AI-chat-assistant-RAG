@@ -65,9 +65,25 @@ class HealthResponse(BaseModel):
     status: str
     message: str
 
-def initialize_backend():
-    """Initialize backend components."""
-    global orchestrator, schemes
+# Global variables for lazy loading
+orchestrator = None
+schemes = []
+_orchestrator_initialized = False
+
+def lazy_initialize_orchestrator():
+    """Lazy-load ChromaDB and embeddings only when first query happens."""
+    global orchestrator, _orchestrator_initialized
+    
+    if _orchestrator_initialized:
+        logger.info("Orchestrator already initialized, skipping...")
+        return True
+    
+    logger.info("Starting lazy initialization of orchestrator...")
+    logger.info("Heavy imports status: LOADING (importing RAG components)")
+    
+    # Log memory before heavy loading
+    before_heavy_memory = get_memory_usage()
+    logger.info(f"Memory before heavy loading: {before_heavy_memory} MB")
     
     try:
         # Use environment variables for paths with deployment-safe defaults
@@ -86,14 +102,21 @@ def initialize_backend():
             logger.warning(f"Chunked data file not found at: {chunked_data_path}")
             schemes = []
         
-        # Initialize orchestrator with memory optimization
+        # Initialize orchestrator with maximum memory optimization for Render free tier
         persist_dir = indexed_data_path
-        use_bm25 = os.getenv('USE_BM25', 'false').lower() == 'true'
-        use_reranker = os.getenv('USE_RERANKER', 'false').lower() == 'true'
+        
+        # Force disable memory-intensive features for Render free tier
+        use_bm25 = False  # Always disabled for free tier
+        use_reranker = False  # Always disabled for free tier
         
         logger.info(f"Initializing orchestrator with BM25: {use_bm25}, Reranker: {use_reranker}")
         logger.info(f"Using persist directory: {persist_dir}")
+        logger.info("Using memory-optimized configuration for Render free tier")
         
+        # Log ChromaDB initialization start
+        logger.info("ChromaDB initialization status: STARTING")
+        
+        # Initialize with minimal memory footprint
         orchestrator = RAGOrchestrator(
             persist_directory=persist_dir,
             scheme_names=schemes,
@@ -101,7 +124,72 @@ def initialize_backend():
             use_reranker=use_reranker
         )
         
-        logger.info("Backend initialized successfully")
+        # Log ChromaDB initialization complete
+        logger.info("ChromaDB initialization status: COMPLETED")
+        
+        # Log embedding model loading
+        logger.info("Embedding model status: LOADED (default lightweight model)")
+        logger.info("Model loading status: COMPLETED (RAG system ready)")
+        
+        # Log memory after heavy loading
+        after_heavy_memory = get_memory_usage()
+        logger.info(f"Memory after heavy loading: {after_heavy_memory} MB")
+        
+        _orchestrator_initialized = True
+        logger.info("Backend initialized successfully (lazy-loaded)")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing backend: {str(e)}")
+        return False
+
+def get_memory_usage():
+    """Get current memory usage in MB."""
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        return memory_info.rss / 1024 / 1024  # Convert to MB
+    except ImportError:
+        return "Unknown (psutil not available)"
+
+def initialize_backend():
+    """Initialize backend components with minimal startup memory usage."""
+    global schemes
+    
+    # Log startup memory usage
+    startup_memory = get_memory_usage()
+    logger.info(f"Backend startup: Current RAM usage: {startup_memory} MB")
+    logger.info("Backend startup: Loading schemes only (lazy-loading orchestrator)")
+    
+    try:
+        # Use environment variables for paths with deployment-safe defaults
+        data_path = os.getenv('DATA_PATH', os.path.join(BASE, 'data'))
+        processed_data_path = os.getenv('PROCESSED_DATA_PATH', os.path.join(BASE, 'data', 'processed'))
+        
+        # Load schemes from chunked data (minimal memory usage)
+        chunked_data_path = os.path.join(processed_data_path, 'chunked_data_phase1.4.json')
+        if os.path.exists(chunked_data_path):
+            with open(chunked_data_path, 'r', encoding='utf-8') as f:
+                chunks = json.load(f)
+            schemes = sorted(list(set(c['scheme_name'] for c in chunks)))
+            logger.info(f"Loaded {len(schemes)} schemes")
+        else:
+            logger.warning(f"Chunked data file not found at: {chunked_data_path}")
+            schemes = []
+        
+        # Log model loading status (all models deferred)
+        logger.info("Model loading status: DEFERRED (will load on first query)")
+        logger.info("ChromaDB initialization status: DEFERRED (will initialize on first query)")
+        logger.info("Embedding model status: DEFERRED (will load on first query)")
+        logger.info("Heavy imports status: DEFERRED (will import on first query)")
+        
+        # Log memory after schemes loading
+        after_schemes_memory = get_memory_usage()
+        logger.info(f"Memory after loading schemes: {after_schemes_memory} MB")
+        
+        # Do NOT initialize orchestrator at startup - lazy load on first query
+        logger.info("Orchestrator will be lazy-loaded on first query to minimize startup RAM")
+        logger.info("Backend startup complete (minimal memory usage)")
         return True
     except Exception as e:
         logger.error(f"Error initializing backend: {str(e)}")
@@ -141,10 +229,12 @@ async def get_schemes():
 @app.post("/query", response_model=QueryResponse)
 async def query_fund(request: QueryRequest):
     """Query RAG system for mutual fund information."""
-    if not orchestrator:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+    # Lazy-load orchestrator on first query to minimize startup RAM
+    if not lazy_initialize_orchestrator():
+        raise HTTPException(status_code=503, detail="Failed to initialize backend")
     
     try:
+        logger.info(f"Processing query: {request.query[:100]}...")
         # Process query through orchestrator
         response = orchestrator.answer_query(request.query)
         
@@ -162,10 +252,12 @@ async def query_fund(request: QueryRequest):
 @app.post("/chat", response_model=QueryResponse)
 async def chat_with_history(request: QueryRequest):
     """Chat with conversation history support."""
-    if not orchestrator:
-        raise HTTPException(status_code=503, detail="Backend not initialized")
+    # Lazy-load orchestrator on first query to minimize startup RAM
+    if not lazy_initialize_orchestrator():
+        raise HTTPException(status_code=503, detail="Failed to initialize backend")
     
     try:
+        logger.info(f"Processing chat query: {request.query[:100]}...")
         # For now, just process current query
         # TODO: Implement conversation history processing
         response = orchestrator.answer_query(request.query)
