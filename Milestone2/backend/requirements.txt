@@ -1,12 +1,31 @@
+# Backend FastAPI + RAG Dependencies for HDFC Mutual Fund Assistant
+# Optimized for Python 3.11 and Streamlit Cloud deployment
+
+# Core FastAPI Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
+python-multipart==0.0.6
+
+# Environment Configuration
 python-dotenv==1.0.0
+
+# Vector Database & Embeddings
 chromadb==0.4.18
 sentence-transformers==2.2.2
-rank-bm25==0.2.2
+
+# ML & AI Libraries (CPU-optimized versions)
+torch==2.1.0
 numpy==1.24.3
 pandas==2.0.3
+scikit-learn==1.3.2
+
+# Search & Retrieval
+rank-bm25==0.2.2
+
+# AI Model APIs
 openai==1.3.8
 groq==0.4.1
-python-multipart==0.0.6
+
+# Additional Utilities
+tqdm==4.66.1

@@ -1,6 +1,6 @@
 """
 Streamlit Backend API for HDFC Mutual Fund Assistant
-Provides REST API endpoints for the RAG system
+Provides REST API endpoints for RAG system
 """
 
 import os
@@ -14,6 +14,8 @@ from pydantic import BaseModel
 import uvicorn
 
 # Add Phase 2 and Phase 3 src to path
+# Fix: Correct BASE path calculation - backend is inside Milestone2
+# backend/app.py -> backend -> Milestone2
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, 'phase2_retrieval_layer', 'src'))
 sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
@@ -64,24 +66,33 @@ class HealthResponse(BaseModel):
     message: str
 
 def initialize_backend():
-    """Initialize the backend components."""
+    """Initialize backend components."""
     global orchestrator, schemes
     
     try:
+        # Use environment variables for paths with deployment-safe defaults
+        data_path = os.getenv('DATA_PATH', os.path.join(BASE, 'data'))
+        processed_data_path = os.getenv('PROCESSED_DATA_PATH', os.path.join(BASE, 'data', 'processed'))
+        indexed_data_path = os.getenv('INDEXED_DATA_PATH', os.path.join(BASE, 'data', 'indexed'))
+        
         # Load schemes from chunked data
-        chunked_data_path = os.path.join(BASE, 'data', 'processed', 'chunked_data_phase1.4.json')
+        chunked_data_path = os.path.join(processed_data_path, 'chunked_data_phase1.4.json')
         if os.path.exists(chunked_data_path):
             with open(chunked_data_path, 'r', encoding='utf-8') as f:
                 chunks = json.load(f)
             schemes = sorted(list(set(c['scheme_name'] for c in chunks)))
             logger.info(f"Loaded {len(schemes)} schemes")
+        else:
+            logger.warning(f"Chunked data file not found at: {chunked_data_path}")
+            schemes = []
         
         # Initialize orchestrator with memory optimization
-        persist_dir = os.path.join(BASE, 'data', 'indexed')
+        persist_dir = indexed_data_path
         use_bm25 = os.getenv('USE_BM25', 'false').lower() == 'true'
         use_reranker = os.getenv('USE_RERANKER', 'false').lower() == 'true'
         
         logger.info(f"Initializing orchestrator with BM25: {use_bm25}, Reranker: {use_reranker}")
+        logger.info(f"Using persist directory: {persist_dir}")
         
         orchestrator = RAGOrchestrator(
             persist_directory=persist_dir,
@@ -129,7 +140,7 @@ async def get_schemes():
 
 @app.post("/query", response_model=QueryResponse)
 async def query_fund(request: QueryRequest):
-    """Query the RAG system for mutual fund information."""
+    """Query RAG system for mutual fund information."""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Backend not initialized")
     
@@ -155,7 +166,7 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=503, detail="Backend not initialized")
     
     try:
-        # For now, just process the current query
+        # For now, just process current query
         # TODO: Implement conversation history processing
         response = orchestrator.answer_query(request.query)
         
@@ -171,11 +182,15 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
 
 if __name__ == "__main__":
-    # Run the FastAPI server
+    # Run FastAPI server with deployment configuration
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 8501))
+    
     uvicorn.run(
         "app:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 8501)),
+        host=host,
+        port=port,
         reload=False,
-        access_log=True
+        access_log=True,
+        log_level=os.getenv("LOG_LEVEL", "info").lower()
     )
