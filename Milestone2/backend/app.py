@@ -13,14 +13,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-# Add Phase 2 and Phase 3 src to path
+# Add Phase 2 and Phase 3 src to path (lazy import)
 # Fix: Correct BASE path calculation - backend is inside Milestone2
 # backend/app.py -> backend -> Milestone2
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, 'phase2_retrieval_layer', 'src'))
 sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
 
-from orchestrator import RAGOrchestrator
+# Lazy import orchestrator to reduce startup memory
+orchestrator = None
+
+def get_orchestrator():
+    """Get orchestrator instance (lazy import)."""
+    global orchestrator
+    if orchestrator is None:
+        logger.info("Lazy importing RAGOrchestrator...")
+        from orchestrator import RAGOrchestrator
+        orchestrator = RAGOrchestrator
+        logger.info("RAGOrchestrator imported successfully")
+    return orchestrator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -117,12 +128,7 @@ def lazy_initialize_orchestrator():
         logger.info("ChromaDB initialization status: STARTING")
         
         # Initialize with minimal memory footprint
-        orchestrator = RAGOrchestrator(
-            persist_directory=persist_dir,
-            scheme_names=schemes,
-            use_bm25=use_bm25,
-            use_reranker=use_reranker
-        )
+        orchestrator = get_orchestrator()(schemes, persist_dir, use_bm25, use_reranker)
         
         # Log ChromaDB initialization complete
         logger.info("ChromaDB initialization status: COMPLETED")
@@ -153,7 +159,7 @@ def get_memory_usage():
         return "Unknown (psutil not available)"
 
 def initialize_backend():
-    """Initialize backend components with minimal startup memory usage."""
+    """Initialize backend components with minimal startup memory usage for Railway."""
     global schemes
     
     # Log startup memory usage
@@ -182,10 +188,19 @@ def initialize_backend():
         logger.info("ChromaDB initialization status: DEFERRED (will initialize on first query)")
         logger.info("Embedding model status: DEFERRED (will load on first query)")
         logger.info("Heavy imports status: DEFERRED (will import on first query)")
+        logger.info("sentence-transformers: DEFERRED (will load on first query)")
+        logger.info("transformers: DEFERRED (will load on first query)")
         
         # Log memory after schemes loading
         after_schemes_memory = get_memory_usage()
         logger.info(f"Memory after loading schemes: {after_schemes_memory} MB")
+        
+        # Ensure startup memory is under 300MB for Railway free tier
+        if isinstance(after_schemes_memory, (int, float)):
+            if after_schemes_memory > 300:
+                logger.warning(f"Startup memory {after_schemes_memory}MB exceeds Railway free tier limit of 300MB")
+            else:
+                logger.info(f"Startup memory {after_schemes_memory}MB is within Railway free tier limit")
         
         # Do NOT initialize orchestrator at startup - lazy load on first query
         logger.info("Orchestrator will be lazy-loaded on first query to minimize startup RAM")
@@ -274,14 +289,20 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
 
 if __name__ == "__main__":
-    # Run FastAPI server with deployment configuration
+    # Run FastAPI server with Railway deployment configuration
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", 8501))
+    port = int(os.getenv("PORT", 8000))
+    
+    # Log final startup configuration
+    logger.info(f"Starting FastAPI server on {host}:{port}")
+    logger.info(f"Using Railway deployment configuration")
+    logger.info("Memory-optimized startup complete")
     
     uvicorn.run(
         "app:app",
         host=host,
         port=port,
+        workers=1,  # Single worker for memory efficiency
         reload=False,
         access_log=True,
         log_level=os.getenv("LOG_LEVEL", "info").lower()

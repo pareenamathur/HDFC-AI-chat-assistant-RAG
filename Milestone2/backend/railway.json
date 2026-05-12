@@ -1,0 +1,28 @@
+{
+  "name": "hdfc-mutual-fund-backend",
+  "services": {
+    "api": {
+      "type": "web",
+      "sourceDir": ".",
+      "buildCommand": {
+        "origin": "default",
+        "user": "pip install -r requirements.txt"
+      },
+      "startCommand": {
+        "origin": "default",
+        "user": "uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1"
+      },
+      "healthcheckPath": "/health",
+      "healthCheckTimeout": 100,
+      "autoDeploy": false,
+      "plans": {
+        "starter": {
+          "instanceType": "e-1",
+          "cpu": "1",
+          "memory": "512",
+          "buildpack": "python"
+        }
+      }
+    }
+  }
+}
