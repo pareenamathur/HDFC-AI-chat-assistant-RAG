@@ -6,6 +6,7 @@ import {
   postQuery,
   apiErrorMessage,
   API_BASE_URL,
+  getApiConfigWarning,
   type HealthResponse,
   type QueryResponse,
 } from '@/lib/api';
@@ -69,34 +70,42 @@ function ApiStatusPill({
 }) {
   if (loading) {
     return (
-      <div className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-high px-sm py-xs">
-        <span className="relative flex h-2 w-2">
+      <div className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-high px-sm py-xs">
+        <span className="relative flex h-2 w-2 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-on-surface-variant opacity-40" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-on-surface-variant" />
         </span>
-        <span className="text-label-md text-on-surface-variant">Checking…</span>
+        <span className="truncate text-label-md text-on-surface-variant">Checking…</span>
       </div>
     );
   }
   if (!health || health.status !== 'healthy') {
     return (
-      <div className="flex items-center gap-xs rounded-full border border-error-container bg-surface-container-high px-sm py-xs">
-        <MsIcon name="wifi_off" className="text-[16px] text-error" />
-        <span className="text-label-md text-error">Offline</span>
+      <div className="flex max-w-full items-center gap-xs rounded-full border border-error-container bg-surface-container-high px-sm py-xs">
+        <MsIcon name="wifi_off" className="shrink-0 text-[16px] text-error" />
+        <span className="truncate text-label-md text-error">Unavailable</span>
       </div>
     );
   }
   if (health.degraded) {
     return (
-      <div className="flex items-center gap-xs rounded-full border border-secondary bg-surface-container-high px-sm py-xs">
-        <MsIcon name="error" className="text-[16px] text-secondary" />
-        <span className="text-label-md text-on-surface">Fallback mode</span>
+      <div className="flex max-w-full items-center gap-xs rounded-full border border-secondary bg-surface-container-high px-sm py-xs">
+        <MsIcon name="error" className="shrink-0 text-[16px] text-secondary" />
+        <span className="truncate text-label-md text-on-surface">Fallback</span>
       </div>
     );
   }
   const n = health.schemes_loaded ?? 0;
-  const funds = n > 0 ? `${n} fund${n === 1 ? '' : 's'}` : 'API';
-  const label =
+  const funds = n > 0 ? `${n} funds` : 'live';
+  const short =
+    health.rag_available && health.rag_ready
+      ? `Online · ${funds}`
+      : health.rag_available
+        ? `Warming · ${funds}`
+        : health.index_on_disk
+          ? `Index · ${funds}`
+          : `Online · ${funds}`;
+  const long =
     health.rag_available && health.rag_ready
       ? `System online (${funds})`
       : health.rag_available
@@ -105,15 +114,19 @@ function ApiStatusPill({
           ? `Index ready (${funds})`
           : `System online (${funds})`;
   return (
-    <div className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-high px-sm py-xs">
-      <span className="relative flex h-2 w-2">
+    <div className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-high px-sm py-xs">
+      <span className="relative flex h-2 w-2 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
       </span>
-      <span className="text-label-md text-on-surface">{label}</span>
-      {health.mock_mode && (
-        <span className="text-label-sm text-on-surface-variant">· demo LLM</span>
-      )}
+      <span className="hidden truncate text-label-md text-on-surface sm:inline" title={long}>
+        {long}
+        {health.mock_mode ? ' · demo LLM' : ''}
+      </span>
+      <span className="truncate text-label-md text-on-surface sm:hidden" title={long}>
+        {short}
+        {health.mock_mode ? ' · demo' : ''}
+      </span>
     </div>
   );
 }
@@ -125,10 +138,15 @@ export default function Home() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
+  const [healthUnreachable, setHealthUnreachable] = useState(false);
+
+  const configWarning = getApiConfigWarning();
 
   const refreshHealth = useCallback(async () => {
+    setHealthLoading(true);
     const h = await fetchBackendHealth();
     setHealth(h);
+    setHealthUnreachable(h == null);
     setHealthLoading(false);
     return h;
   }, []);
@@ -144,18 +162,18 @@ export default function Home() {
     if (!text) return;
 
     const userMessage: Message = { role: 'user', content: text };
+    const history = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setShowWelcome(false);
     setIsLoading(true);
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
       const data: QueryResponse = await postQuery(text, history);
-
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.answer,
@@ -202,31 +220,51 @@ export default function Home() {
   };
 
   return (
-    <>
-      {/* Sticky disclaimer — Stitch amber strip */}
-      <div className="sticky top-0 z-[60] shrink-0 border-b border-disclaimer/20 bg-disclaimer/10 py-base text-center">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background">
+      {configWarning && (
+        <div className="shrink-0 border-b border-disclaimer/40 bg-disclaimer/15 px-md py-sm text-center text-label-md text-disclaimer">
+          {configWarning}
+        </div>
+      )}
+
+      {!healthLoading && healthUnreachable && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-outline bg-surface-container-high px-md py-sm text-body-md text-on-surface-variant">
+          <span>Backend temporarily unavailable — check API URL and CORS.</span>
+          <button
+            type="button"
+            onClick={() => void refreshHealth()}
+            className="rounded-full border border-primary px-md py-xs text-label-md font-semibold text-primary transition hover:bg-primary/10"
+          >
+            Retry health
+          </button>
+        </div>
+      )}
+
+      <div className="shrink-0 border-b border-disclaimer/20 bg-disclaimer/10 py-base text-center">
         <p className="text-label-sm tracking-wide text-disclaimer">
           Important: Facts-only assistant · Not investment advice
         </p>
       </div>
 
-      <header className="flex w-full shrink-0 items-center justify-between border-b border-outline bg-surface-container-low px-md py-sm">
-        <div className="flex min-w-0 items-center gap-sm">
+      <header className="flex w-full shrink-0 flex-wrap items-center justify-between gap-y-sm border-b border-outline bg-surface-container-low px-md py-sm">
+        <div className="flex min-w-0 max-w-full flex-1 items-center gap-sm">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary-container/10">
             <MsIcon name="shield" className="text-primary text-[22px]" fill />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-headline-md leading-tight text-primary">HDFC Assistant</h1>
-            <p className="text-label-sm tracking-widest text-on-surface-variant">CORPUS-BOUND RAG</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-headline-md leading-tight text-primary">HDFC Assistant</h1>
+            <p className="truncate text-label-sm tracking-widest text-on-surface-variant">
+              CORPUS-BOUND RAG
+            </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-md">
+        <div className="flex w-full min-w-0 shrink-0 items-center justify-end gap-sm sm:w-auto sm:max-w-[55%]">
           <ApiStatusPill health={health} loading={healthLoading} />
-          <div className="hidden gap-xs sm:flex">
+          <div className="hidden shrink-0 gap-xs sm:flex">
             <button
               type="button"
               className="rounded-lg p-xs text-on-surface-variant transition hover:bg-surface-container-highest"
-              aria-label="History"
+              aria-label="Scroll to top"
               onClick={() => document.getElementById('chat-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}
             >
               <MsIcon name="history" />
@@ -244,16 +282,15 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Sidebar — Stitch desktop */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-outline bg-surface-container-low p-md md:flex">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        <aside className="hidden w-64 min-w-0 shrink-0 flex-col overflow-y-auto border-r border-outline bg-surface-container-low p-md md:flex">
           <div className="mb-xl space-y-base">
             <button
               type="button"
               onClick={newChat}
-              className="flex w-full items-center gap-sm rounded-lg bg-primary-container p-sm text-label-md font-bold text-on-primary-container transition hover:opacity-90"
+              className="flex w-full items-center gap-sm rounded-lg bg-primary-container p-sm text-left text-label-md font-bold text-on-primary-container transition hover:opacity-90"
             >
-              <MsIcon name="add_comment" className="text-[20px]" />
+              <MsIcon name="add_comment" className="shrink-0 text-[20px]" />
               New chat
             </button>
             <nav className="space-y-base pt-md">
@@ -262,7 +299,7 @@ export default function Home() {
                 onClick={() => document.getElementById('chat-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })}
                 className="flex w-full items-center gap-sm rounded-lg p-sm text-left text-label-md text-on-surface-variant transition hover:bg-surface-container-highest"
               >
-                <MsIcon name="history" className="text-[20px]" />
+                <MsIcon name="history" className="shrink-0 text-[20px]" />
                 History
               </button>
               <button
@@ -270,7 +307,7 @@ export default function Home() {
                 onClick={newChat}
                 className="flex w-full items-center gap-sm rounded-lg p-sm text-left text-label-md text-on-surface-variant transition hover:bg-surface-container-highest"
               >
-                <MsIcon name="trending_up" className="text-[20px]" />
+                <MsIcon name="trending_up" className="shrink-0 text-[20px]" />
                 Market insights
               </button>
               <button
@@ -278,7 +315,7 @@ export default function Home() {
                 className="flex w-full cursor-default items-center gap-sm rounded-lg p-sm text-left text-label-md text-on-surface-variant/60"
                 aria-disabled
               >
-                <MsIcon name="settings" className="text-[20px]" />
+                <MsIcon name="settings" className="shrink-0 text-[20px]" />
                 Settings
               </button>
             </nav>
@@ -303,14 +340,14 @@ export default function Home() {
                 href="https://www.hdfcfund.com/contact-us"
                 className="flex items-center gap-sm px-sm py-xs text-label-sm text-on-surface-variant transition hover:text-on-surface"
               >
-                <MsIcon name="contact_support" className="text-[18px]" />
+                <MsIcon name="contact_support" className="shrink-0 text-[18px]" />
                 Support
               </a>
               <a
                 href="https://www.hdfcfund.com/privacy-policy"
                 className="flex items-center gap-sm px-sm py-xs text-label-sm text-on-surface-variant transition hover:text-on-surface"
               >
-                <MsIcon name="policy" className="text-[18px]" />
+                <MsIcon name="policy" className="shrink-0 text-[18px]" />
                 Privacy
               </a>
             </div>
@@ -318,24 +355,22 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* Chat column */}
-        <section className="relative flex min-w-0 flex-1 flex-col bg-background pb-16 md:pb-0">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
           <div
             id="chat-scroll"
-            className="custom-scrollbar flex-1 overflow-y-auto px-md py-xl"
+            className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-md py-md md:py-xl"
           >
-            <div className="mx-auto w-full max-w-container-max space-y-xl">
+            <div className="mx-auto w-full max-w-container-max space-y-lg md:space-y-xl">
               {showWelcome && messages.length === 0 && (
-                <div className="mb-xl flex flex-col items-center border-b border-outline/50 py-xl text-center">
-                  <div className="mb-lg flex h-16 w-16 items-center justify-center rounded-2xl border border-outline bg-surface-container-high">
+                <div className="flex flex-col items-center border-b border-outline/50 py-lg text-center md:py-xl">
+                  <div className="mb-md flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-outline bg-surface-container-high md:mb-lg">
                     <MsIcon name="account_balance" className="text-[40px] text-primary" />
                   </div>
-                  <h2 className="mb-xs text-headline-lg text-on-surface">
+                  <h2 className="mb-xs px-2 text-headline-lg text-on-surface">
                     Ask me anything about HDFC Mutual Funds
                   </h2>
-                  <p className="mb-xl max-w-md text-body-md text-on-surface-variant">
-                    Accurate, corpus-driven answers from your indexed FAQ. Compliant with a facts-only posture —
-                    not personalized advice.
+                  <p className="mb-lg max-w-md px-2 text-body-md text-on-surface-variant md:mb-xl">
+                    Accurate, corpus-driven answers from your indexed FAQ. Facts-only — not personalized advice.
                   </p>
                   <div className="grid w-full grid-cols-1 gap-md md:grid-cols-3">
                     {STITCH_SUGGESTIONS.map((s) => (
@@ -343,29 +378,29 @@ export default function Home() {
                         key={s.label}
                         type="button"
                         onClick={() => void handleSendMessage(s.text)}
-                        className="rounded-xl border border-outline bg-surface-container-low p-lg text-left transition hover:border-primary"
+                        className="rounded-xl border border-outline bg-surface-container-low p-md text-left transition hover:border-primary md:p-lg"
                       >
                         <p className="mb-xs text-label-md font-bold text-primary">{s.label}</p>
-                        <p className="text-body-md text-on-surface">&ldquo;{s.text}&rdquo;</p>
+                        <p className="break-words text-body-md text-on-surface">&ldquo;{s.text}&rdquo;</p>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              <div className="space-y-lg">
+              <div className="space-y-md md:space-y-lg">
                 {messages.map((message, index) => (
-                  <div key={index}>
+                  <div key={index} className="min-w-0">
                     {message.role === 'user' ? (
                       <div className="flex justify-end">
-                        <div className="max-w-[80%] rounded-2xl rounded-tr-base bg-primary px-lg py-sm text-body-md font-medium text-background">
+                        <div className="max-w-[min(100%,32rem)] break-words rounded-2xl rounded-tr-base bg-primary px-md py-sm text-body-md font-medium text-background sm:px-lg">
                           {message.content}
                         </div>
                       </div>
                     ) : (
-                      <div className="flex justify-start">
-                        <div className="flex max-w-[85%] gap-md">
-                          <div className="mt-base flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary-container/10">
+                      <div className="flex min-w-0 justify-start">
+                        <div className="flex min-w-0 max-w-full gap-sm sm:max-w-[min(85%,40rem)] sm:gap-md">
+                          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary-container/10 sm:mt-base">
                             {message.status === 'error' || message.status === 'timeout' ? (
                               <MsIcon name="warning" className="text-[18px] text-error" />
                             ) : message.status === 'degraded' ? (
@@ -374,11 +409,11 @@ export default function Home() {
                               <MsIcon name="shield" className="text-[18px] text-primary" fill />
                             )}
                           </div>
-                          <div className="space-y-sm">
+                          <div className="min-w-0 flex-1 space-y-sm">
                             <div
-                              className={`rounded-2xl rounded-tl-base p-lg text-body-lg leading-relaxed ${assistantBubbleClass(message.status)}`}
+                              className={`break-words rounded-2xl rounded-tl-base p-md text-body-lg leading-relaxed sm:p-lg ${assistantBubbleClass(message.status)}`}
                             >
-                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              <p className="whitespace-pre-wrap break-words">{message.content}</p>
                             </div>
                             {(message.source || message.source_link || message.last_updated) &&
                               message.status !== 'error' && (
@@ -388,21 +423,21 @@ export default function Home() {
                                       href={message.source_link}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant transition hover:border-primary"
+                                      className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant transition hover:border-primary"
                                     >
-                                      <MsIcon name="link" className="text-[14px]" />
-                                      {message.source || 'Source'}
+                                      <MsIcon name="link" className="shrink-0 text-[14px]" />
+                                      <span className="truncate">{message.source || 'Source'}</span>
                                     </a>
                                   )}
                                   {!message.source_link && message.source && (
-                                    <span className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant">
-                                      <MsIcon name="article" className="text-[14px]" />
-                                      {message.source}
+                                    <span className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant">
+                                      <MsIcon name="article" className="shrink-0 text-[14px]" />
+                                      <span className="truncate">{message.source}</span>
                                     </span>
                                   )}
                                   {message.last_updated && (
                                     <span className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant">
-                                      <MsIcon name="schedule" className="text-[14px]" />
+                                      <MsIcon name="schedule" className="shrink-0 text-[14px]" />
                                       {message.last_updated}
                                     </span>
                                   )}
@@ -416,7 +451,7 @@ export default function Home() {
                 ))}
 
                 {isLoading && (
-                  <div className="flex items-center gap-sm">
+                  <div className="flex items-center gap-sm px-1">
                     <div className="flex gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary opacity-40" />
                       <span className="h-1.5 w-1.5 rounded-full bg-primary opacity-70" />
@@ -429,22 +464,22 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Bottom input — Stitch */}
-          <div className="border-t border-outline bg-surface-container-low p-md">
-            <div className="mx-auto max-w-container-max space-y-md">
+          <div className="shrink-0 border-t border-outline bg-surface-container-low p-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="mx-auto w-full max-w-container-max space-y-md">
               <div className="no-scrollbar flex gap-xs overflow-x-auto pb-base">
                 {QUICK_CHIPS.map((chip) => (
                   <button
                     key={chip}
                     type="button"
                     onClick={() => void handleSendMessage(chip)}
-                    className="shrink-0 rounded-full border border-outline bg-surface-container px-md py-xs text-label-md text-on-surface transition hover:border-primary"
+                    disabled={isLoading}
+                    className="shrink-0 rounded-full border border-outline bg-surface-container px-md py-xs text-label-md text-on-surface transition hover:border-primary disabled:opacity-50"
                   >
                     {chip}
                   </button>
                 ))}
               </div>
-              <div className="relative flex items-center">
+              <div className="relative flex min-w-0 items-center">
                 <input
                   type="text"
                   value={input}
@@ -452,13 +487,13 @@ export default function Home() {
                   onKeyDown={handleKeyDown}
                   placeholder="Ask about HDFC funds, returns, or ratios…"
                   disabled={isLoading}
-                  className="w-full rounded-full border border-outline bg-background py-lg pl-xl pr-14 text-body-md text-on-surface placeholder:text-on-surface-variant/70 transition focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  className="min-w-0 w-full rounded-full border border-outline bg-background py-3 pl-4 pr-[7.5rem] text-body-md text-on-surface placeholder:text-on-surface-variant/70 transition focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 sm:py-lg sm:pl-xl sm:pr-32"
                   aria-label="Ask a question"
                 />
-                <div className="absolute right-xs flex items-center gap-xs">
+                <div className="absolute right-1 flex shrink-0 items-center gap-0 sm:right-xs sm:gap-xs">
                   <button
                     type="button"
-                    className="p-sm text-on-surface-variant hover:text-on-surface"
+                    className="p-2 text-on-surface-variant hover:text-on-surface sm:p-sm"
                     aria-label="Attach (not available)"
                     disabled
                   >
@@ -468,23 +503,22 @@ export default function Home() {
                     type="button"
                     onClick={() => void handleSendMessage()}
                     disabled={isLoading || !input.trim()}
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-background transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:opacity-50"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-background transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:opacity-50 sm:h-12 sm:w-12"
                     aria-label="Send"
                   >
                     <MsIcon name="arrow_upward" className="font-bold" />
                   </button>
                 </div>
               </div>
-              <p className="text-center text-[10px] uppercase tracking-tighter text-on-surface-variant/50">
-                Powered by your HDFC RAG API · {API_BASE_URL.replace(/^https?:\/\//, '')}
+              <p className="truncate text-center text-[10px] uppercase tracking-tighter text-on-surface-variant/50">
+                API · {API_BASE_URL.replace(/^https?:\/\//, '')}
               </p>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Mobile nav — Stitch */}
-      <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around border-t border-outline bg-surface-container-high py-xs px-lg md:hidden">
+      <nav className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-around border-t border-outline bg-surface-container-high py-xs pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-xs px-lg md:hidden">
         <div className="flex flex-col items-center justify-center rounded-full bg-primary-container px-4 py-1 text-on-primary-container">
           <MsIcon name="chat_bubble" fill className="text-[22px]" />
           <span className="text-label-sm">Assistant</span>
@@ -505,6 +539,6 @@ export default function Home() {
           <span className="text-label-sm">New</span>
         </button>
       </nav>
-    </>
+    </div>
   );
 }

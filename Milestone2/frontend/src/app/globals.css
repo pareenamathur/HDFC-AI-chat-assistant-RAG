@@ -10,7 +10,7 @@
   }
 
   body {
-    @apply antialiased bg-background text-on-surface;
+    @apply antialiased;
   }
 
   .material-symbols-outlined {
