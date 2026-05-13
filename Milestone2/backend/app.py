@@ -23,7 +23,7 @@ os.environ.setdefault("CHROMA_TELEMETRY", "false")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 try:
     from dotenv import load_dotenv
@@ -151,6 +151,12 @@ class HealthResponse(BaseModel):
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
     degraded: bool = Field(default=False)
+
+    @computed_field
+    @property
+    def rag_ready(self) -> bool:
+        """Alias for `rag_available` (legacy clients)."""
+        return self.rag_available
 
 
 def _load_schemes_only() -> List[str]:

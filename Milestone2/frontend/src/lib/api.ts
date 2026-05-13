@@ -34,6 +34,8 @@ export type HealthResponse = {
   chroma_loaded?: boolean;
   mock_mode?: boolean;
   degraded?: boolean;
+  /** Same as rag_available (legacy). */
+  rag_ready?: boolean;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {
