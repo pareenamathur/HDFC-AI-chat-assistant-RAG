@@ -325,7 +325,7 @@ def _sync_init_rag_body() -> None:
             )
 
 
-async def ensure_rag_engine_async(request: Request) -> None:
+async def ensure_rag_engine_async_from_app(app: FastAPI) -> None:
     """
     Lazy-init RAG with hard wall clock. Never blocks forever.
     Serialised per-process via app.state.rag_lock.
@@ -337,7 +337,7 @@ async def ensure_rag_engine_async(request: Request) -> None:
     if _degraded_no_rag and _rag_init_attempted:
         return
 
-    lock = request.app.state.rag_lock
+    lock = app.state.rag_lock
     init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
 
     async with lock:
@@ -369,6 +369,10 @@ async def ensure_rag_engine_async(request: Request) -> None:
             logger.exception("ensure_rag_engine_async outer failure")
             _degraded_no_rag = True
             _rag_init_error = _rag_init_error or "async init wrapper failed"
+
+
+async def ensure_rag_engine_async(request: Request) -> None:
+    await ensure_rag_engine_async_from_app(request.app)
 
 
 def _run_query_sync(query: str) -> Dict[str, Any]:
@@ -407,8 +411,8 @@ def _build_health_response() -> HealthResponse:
             msg += f" ({_rag_init_error[:100]})"
     elif index_on_disk:
         msg = (
-            "Chroma index files present — RAG loads lazily on first POST /query only "
-            "(rag_available flips true after init; not an error)."
+            "Chroma index on disk; RAG should attach via background warm or first POST /query. "
+            "If this persists, check logs for RAG init errors."
         )
         if mock_mode:
             msg += " mock_mode=true means GROQ_API_KEY is unset (LLM demo when RAG runs)."
@@ -484,11 +488,36 @@ async def lifespan(app: FastAPI):
 
     mem = _memory_mb()
     logger.info(
-        "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB | "
+        "Startup complete — routes live | schemes=%s RAM=%.1f MB | "
         "mock_mode on /health = not groq_key_present.",
         len(_schemes),
         mem or -1,
     )
+
+    # Warm Chroma + orchestrator in the background so /health shows rag_available without
+    # requiring a synthetic first /query (Railway probes often only hit /health).
+    warm = _bool_env("RAG_BACKGROUND_WARM", True)
+    if warm and _chroma_index_on_disk():
+
+        async def _background_rag_warm() -> None:
+            try:
+                logger.info("Background RAG warm task started (non-blocking).")
+                await ensure_rag_engine_async_from_app(app)
+                if rag_orchestrator is not None:
+                    logger.info("Background RAG warm completed — orchestrator ready.")
+                else:
+                    logger.warning(
+                        "Background RAG warm finished without orchestrator (degraded=%s err=%s)",
+                        _degraded_no_rag,
+                        (_rag_init_error or "")[:200],
+                    )
+            except Exception:
+                logger.exception("Background RAG warm task failed")
+
+        asyncio.create_task(_background_rag_warm())
+    elif warm and not _chroma_index_on_disk():
+        logger.info("RAG_BACKGROUND_WARM=true but no chroma.sqlite3 — skipping background warm.")
+
     yield
     logger.info("HDFC MF API shutdown")
 
@@ -496,7 +525,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.2",
+    version="2.2.3",
     lifespan=lifespan,
 )
 
