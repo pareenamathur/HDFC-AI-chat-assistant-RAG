@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Before chromadb / grpc (protobuf + thread caps).
@@ -99,6 +100,14 @@ def _indexed_dir() -> str:
     return _str_env("INDEXED_DATA_PATH", "") or os.path.join(BASE, "data", "indexed")
 
 
+def _chroma_index_on_disk() -> bool:
+    """Lightweight check — no Chroma import. True if persistent DB file is present."""
+    try:
+        return (Path(_indexed_dir()) / "chroma.sqlite3").is_file()
+    except Exception:
+        return False
+
+
 def _memory_mb() -> Optional[float]:
     try:
         import psutil
@@ -155,6 +164,10 @@ class HealthResponse(BaseModel):
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
     degraded: bool = Field(default=False)
+    index_on_disk: bool = Field(
+        default=False,
+        description="True if chroma.sqlite3 exists at INDEXED_DATA_PATH (RAG still lazy until first /query).",
+    )
 
 
 def _load_schemes_only() -> List[str]:
@@ -352,6 +365,7 @@ def _build_health_response() -> HealthResponse:
     mock_mode = not _has_groq_key()
     rag_available = rag_orchestrator is not None
     degraded = not rag_available and (_degraded_no_rag or _rag_init_timed_out)
+    index_on_disk = _chroma_index_on_disk()
 
     if rag_available:
         msg = "Full RAG available"
@@ -363,8 +377,20 @@ def _build_health_response() -> HealthResponse:
         msg = "Fallback mode: RAG unavailable — placeholder answers"
         if _rag_init_error:
             msg += f" ({_rag_init_error[:100]})"
+    elif index_on_disk:
+        msg = (
+            "Chroma index files present — RAG loads lazily on first POST /query only "
+            "(rag_available flips true after init; not an error)."
+        )
+        if mock_mode:
+            msg += " mock_mode=true means GROQ_API_KEY is unset (LLM demo when RAG runs)."
     else:
-        msg = "API up — RAG loads on first question (bounded init)"
+        msg = (
+            "No chroma.sqlite3 at INDEXED_DATA_PATH — clone may be missing data/indexed/ "
+            "or path is wrong. Rebuild: python scripts/rebuild_chroma_from_chunks.py --force"
+        )
+        if mock_mode:
+            msg += " (mock_mode only reflects missing GROQ_API_KEY.)"
 
     return HealthResponse(
         status="healthy",
@@ -378,6 +404,7 @@ def _build_health_response() -> HealthResponse:
         chroma_loaded=_chroma_loaded,
         mock_mode=mock_mode,
         degraded=degraded,
+        index_on_disk=index_on_disk,
     )
 
 
@@ -398,6 +425,7 @@ def _health_safe() -> HealthResponse:
             chroma_loaded=False,
             mock_mode=True,
             degraded=True,
+            index_on_disk=False,
         )
 
 
@@ -422,9 +450,11 @@ async def lifespan(app: FastAPI):
     mem = _memory_mb()
     logger.info(
         "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB | "
-        "mock_mode in /health means missing GROQ_API_KEY only (not Chroma).",
+        "chroma.sqlite3 at %s: %s | mock_mode in /health = missing GROQ only.",
         len(_schemes),
         mem or -1,
+        _indexed_dir(),
+        _chroma_index_on_disk(),
     )
     yield
     logger.info("HDFC MF API shutdown")
@@ -433,7 +463,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.0",
+    version="2.2.1",
     lifespan=lifespan,
 )
 

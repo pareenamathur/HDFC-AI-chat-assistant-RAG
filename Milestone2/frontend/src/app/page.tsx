@@ -77,6 +77,15 @@ function ApiStatusPill({
       </span>
     );
   }
+  if (health.index_on_disk && !health.rag_available) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-500 bg-hdfc-elevated px-3 py-1 text-xs font-medium text-gray-200">
+        <Wifi className="h-3.5 w-3.5 text-teal-400" />
+        Index ready · warm on first question
+        {health.mock_mode ? ' · demo LLM' : ''}
+      </span>
+    );
+  }
   if (health.mock_mode) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-950/40 px-3 py-1 text-xs font-medium text-teal-200">

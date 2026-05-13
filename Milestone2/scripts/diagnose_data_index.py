@@ -66,7 +66,7 @@ def main() -> None:
     print(f"MILESTONE2_ROOT: {root}")
     print(f"INDEXED_FOLDER_EXISTS: {indexed_exists}")
     print(f"INDEXED_FOLDER_EMPTY (no Chroma files aside README): {indexed_empty}")
-    print(f"CHROMA_SQLITE_PRESENT: {sqlite_ok}")
+    print(f"INDEX_ON_DISK (chroma.sqlite3): {sqlite_ok}")
     print(f"PROCESSED_FOLDER_EXISTS: {processed_exists}")
     print(f"CHUNKED_JSON_EXISTS: {chunked_exists}")
     if chunked_exists and chunk_count >= 0:

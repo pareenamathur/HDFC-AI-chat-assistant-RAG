@@ -36,6 +36,8 @@ export type HealthResponse = {
   chroma_loaded?: boolean;
   mock_mode?: boolean;
   degraded?: boolean;
+  /** chroma.sqlite3 exists at index path (RAG may still be cold). */
+  index_on_disk?: boolean;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {
