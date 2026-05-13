@@ -7,11 +7,10 @@ import os
 import sys
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import uvicorn
 
 # Add Phase 2 and Phase 3 src to path (lazy import)
 # Fix: Correct BASE path calculation - backend is inside Milestone2
@@ -64,9 +63,9 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
-    source: str = None
-    source_link: str = None
-    last_updated: str = None
+    source: Optional[str] = None
+    source_link: Optional[str] = None
+    last_updated: Optional[str] = None
     status: str
 
 class SchemesResponse(BaseModel):
@@ -83,7 +82,7 @@ _orchestrator_initialized = False
 
 def lazy_initialize_orchestrator():
     """Lazy-load ChromaDB and embeddings only when first query happens."""
-    global orchestrator, _orchestrator_initialized
+    global orchestrator, _orchestrator_initialized, schemes
     
     if _orchestrator_initialized:
         logger.info("Orchestrator already initialized, skipping...")
@@ -133,7 +132,8 @@ def lazy_initialize_orchestrator():
             persist_directory=persist_dir,
             scheme_names=schemes,
             use_bm25=use_bm25,
-            use_reranker=use_reranker
+            use_reranker=use_reranker,
+            vector_fetch_k=int(os.getenv("STREAMLIT_VECTOR_FETCH_K", "12")),
         )
         
         # Log ChromaDB initialization complete
@@ -295,21 +295,27 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
 
 if __name__ == "__main__":
-    # Run FastAPI server with Railway deployment configuration
+    # Opt-in only — Streamlit (`streamlit_app.py`) is the supported deployment entrypoint.
+    # Prevents accidental long-running servers during tooling / `python backend/app.py`.
+    if os.getenv("ALLOW_LOCAL_FASTAPI", "").strip().lower() not in ("1", "true", "yes"):
+        print(
+            "FastAPI is not started by default. Use Streamlit for deployment.\n"
+            "Run API locally: ALLOW_LOCAL_FASTAPI=1 python app.py\n"
+            "Or: uvicorn app:app --host 127.0.0.1 --port 8000",
+            file=sys.stderr,
+        )
+        raise SystemExit(0)
+    import uvicorn
+
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", 8000))
-    
-    # Log final startup configuration
-    logger.info(f"Starting FastAPI server on {host}:{port}")
-    logger.info(f"Using Railway deployment configuration")
-    logger.info("Memory-optimized startup complete")
-    
+    port = int(os.getenv("PORT", "8000"))
+    logger.info("Starting FastAPI server on %s:%s", host, port)
     uvicorn.run(
         "app:app",
         host=host,
         port=port,
-        workers=1,  # Single worker for memory efficiency
+        workers=1,
         reload=False,
         access_log=True,
-        log_level=os.getenv("LOG_LEVEL", "info").lower()
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )
