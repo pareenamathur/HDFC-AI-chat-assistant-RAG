@@ -46,6 +46,18 @@ Optional: point **Main file path** to `Milestone2/streamlit_app.py` instead — 
 
 4. **Advanced** → Python **3.11** or **3.12** (matches local verification).
 
+### Health check returns 404 (`The Streamlit server is responding 404 to health checks`)
+
+That almost always means Cloud is **not running a Streamlit process**, or the app never finishes starting.
+
+| Check | Action |
+|--------|--------|
+| **Wrong entrypoint** | Main file must be **`streamlit_app.py`** (repo root **or** `Milestone2/streamlit_app.py`). **Never** set Main file to **`backend/app.py`** or any FastAPI file — logs like `INFO:app:` / “Railway free tier” come from **FastAPI**, not Streamlit. |
+| **Packages file** | Use **`Milestone2/requirements.txt`** (nested repo) so `streamlit` installs. |
+| **App crash on startup** | Open the app logs; fix import errors so the Streamlit server can bind and serve `_stcore/health`. |
+
+This repo’s Streamlit entry calls **`main()`** at the end of `streamlit_app.py` so the UI always runs under Streamlit Cloud’s loader.
+
 ### Environment variables (optional)
 
 | Variable | Default | Purpose |

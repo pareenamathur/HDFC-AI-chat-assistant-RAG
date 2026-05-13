@@ -424,5 +424,6 @@ def main() -> None:
     )
 
 
-if __name__ == "__main__":
-    main()
+# Streamlit executes this script on every rerun; always enter the app (do not gate on __main__ —
+# some runners/launchers omit __name__ == "__main__", which breaks Cloud health checks).
+main()
