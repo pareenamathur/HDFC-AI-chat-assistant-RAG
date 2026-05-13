@@ -1,6 +1,9 @@
+import logging
 import re
 from typing import Dict, List, Optional, Any
 from thefuzz import process, fuzz
+
+logger = logging.getLogger(__name__)
 
 
 class QueryProcessor:
@@ -107,10 +110,25 @@ class QueryProcessor:
 
         # Fallback: no verbatim match — use fuzzy best-match
         if not found_schemes:
-            best_match, score = process.extractOne(
-                query, self.scheme_names, scorer=fuzz.partial_ratio
-            )
-            if score > 70:
+            # Empty scheme list (e.g. chunked_data missing on deploy) makes extractOne raise —
+            # warm_vector_pipeline still succeeds because it skips process_query filters.
+            if not self.scheme_names:
+                logger.warning(
+                    "QueryProcessor.extract_filters: scheme_names is empty — cannot fuzzy-match schemes. "
+                    "Ensure data/processed/chunked_data_phase1.4.json exists and PROCESSED_DATA_PATH resolves on the server."
+                )
+                return {}
+            try:
+                result = process.extractOne(
+                    query, self.scheme_names, scorer=fuzz.partial_ratio
+                )
+            except (ValueError, TypeError) as e:
+                logger.warning("QueryProcessor.extract_filters: fuzzy extractOne failed: %s", e)
+                return {}
+            if result is None:
+                return {}
+            best_match, score = result
+            if score > 70 and best_match is not None:
                 found_schemes = [best_match]
 
         if len(found_schemes) == 1:

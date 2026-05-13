@@ -130,6 +130,39 @@ def _chroma_index_on_disk() -> bool:
         return False
 
 
+def _log_index_diagnostics() -> None:
+    """Startup visibility for Railway path / index layout (no secrets)."""
+    idx = Path(_indexed_dir())
+    sqlite = idx / "chroma.sqlite3"
+    logger.info(
+        "RAG index diagnostics — INDEXED_DATA_PATH resolved=%s | chroma.sqlite3 exists=%s",
+        idx,
+        sqlite.is_file(),
+    )
+    try:
+        if idx.is_dir():
+            names = sorted(p.name for p in idx.iterdir())
+            logger.info(
+                "indexed_dir entries count=%s sample=%s",
+                len(names),
+                names[:15],
+            )
+            seg_dirs = [n for n in names if len(n) == 36 and "-" in n]
+            logger.info("possible Chroma segment UUID dirs count=%s", len(seg_dirs))
+        else:
+            logger.warning("indexed_dir is not a directory: %s", idx)
+    except Exception as e:
+        logger.warning("Could not list indexed_dir: %s", e)
+
+    proc = Path(_processed_dir())
+    chunk = proc / "chunked_data_phase1.4.json"
+    logger.info(
+        "processed corpus — dir=%s | chunked_data_phase1.4.json exists=%s",
+        proc,
+        chunk.is_file(),
+    )
+
+
 def _memory_mb() -> Optional[float]:
     try:
         import psutil
@@ -312,6 +345,24 @@ def _sync_init_rag_body() -> None:
             after or -1,
         )
 
+        try:
+            n_docs = orch.retriever.collection.count()
+            logger.info("Chroma collection mf_faq_corpus count=%s (post-init)", n_docs)
+            if n_docs == 0:
+                logger.warning(
+                    "Chroma collection is empty — rebuild index: python scripts/rebuild_chroma_from_chunks.py --force"
+                )
+        except Exception as cnt_e:
+            logger.warning("Could not read Chroma collection count: %s", cnt_e)
+
+        if len(_schemes) == 0:
+            logger.warning(
+                "SCHEME LIST IS EMPTY — fund-name filters will be skipped until "
+                "data/processed/chunked_data_phase1.4.json is available (PROCESSED_DATA_PATH=%s). "
+                "POST /query used to fail here when thefuzz received an empty choice list.",
+                _processed_dir(),
+            )
+
         if _bool_env("RAG_EMBEDDING_WARM", True):
             try:
                 orch.warm_retrieval_stack()
@@ -323,6 +374,7 @@ def _sync_init_rag_body() -> None:
                     "model_loaded set to True — embedding stack operational (RAM ~%.1f MB). /health rag_ready + model_loaded.",
                     mem2 or -1,
                 )
+                logger.info("RAG index integrity check passed — probe vector search completed.")
             except Exception as e_w:
                 logger.warning(
                     "Embedding warm failed (orchestrator still usable on first /query): type=%s msg=%s",
@@ -404,10 +456,20 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
         logger.warning("_run_query_sync: no orchestrator — returning fallback")
         return _fallback_query_response(query, reason="unavailable")
     try:
-        logger.info("Running answer_query (first call may load MiniLM embeddings)…")
+        logger.info(
+            "Running answer_query — schemes=%s indexed=%s query_len=%s",
+            len(_schemes),
+            _indexed_dir(),
+            len((query or "").strip()),
+        )
         out = rag_orchestrator.answer_query(query)
     except Exception as e:
-        logger.exception("answer_query failed: %s", e)
+        logger.exception(
+            "answer_query failed — schemes=%s processed_json=%s err_type=%s",
+            len(_schemes),
+            Path(_processed_dir()) / "chunked_data_phase1.4.json",
+            type(e).__name__,
+        )
         return _fallback_query_response(query, reason="unavailable")
 
     global _model_loaded, _retrieval_warmed
@@ -505,6 +567,7 @@ async def lifespan(app: FastAPI):
         _processed_dir(),
         _chroma_index_on_disk(),
     )
+    _log_index_diagnostics()
     try:
         _schemes = _load_schemes_only()
     except Exception:
@@ -513,8 +576,9 @@ async def lifespan(app: FastAPI):
 
     mem = _memory_mb()
     logger.info(
-        "Startup complete — routes live | schemes=%s RAM=%.1f MB | "
+        "Startup complete — routes live | pid=%s | schemes=%s RAM=%.1f MB | "
         "mock_mode on /health = not groq_key_present.",
+        os.getpid(),
         len(_schemes),
         mem or -1,
     )
@@ -550,7 +614,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.5",
+    version="2.2.6",
     lifespan=lifespan,
 )
 

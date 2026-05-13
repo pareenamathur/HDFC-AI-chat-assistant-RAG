@@ -95,6 +95,12 @@ class RAGOrchestrator:
                 filters=None
             )
 
+        logger.info(
+            "RAG retrieval — chunk_count=%s intent=%s",
+            len(all_results),
+            intent,
+        )
+
         if not all_results:
             return {
                 "answer": "I'm sorry, I couldn't find any information about that in my records.",
