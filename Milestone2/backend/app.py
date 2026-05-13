@@ -1,6 +1,6 @@
 """
 HDFC Mutual Fund Assistant — FastAPI production API (Railway / Docker).
-Boots with zero env vars; RAG is lazy; missing index or keys → graceful degradation.
+Boots with zero env vars; RAG is lazy; failures → degraded answers, never stuck ready=false.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import sys
-import threading
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -114,16 +113,12 @@ def _memory_mb() -> Optional[float]:
 # ---------------------------------------------------------------------------
 rag_orchestrator: Any = None
 _schemes: List[str] = []
-# API is "ready" for traffic after lifespan — never false for a running worker.
-_api_ready: bool = False
-# Full RAG (Chroma + retriever) initialized successfully.
 _chroma_loaded: bool = False
-# Embedding / sentence-transformers warmed (first successful retriever use).
 _model_loaded: bool = False
 _rag_init_attempted: bool = False
 _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
-_rag_init_lock = threading.Lock()
+_rag_init_timed_out: bool = False
 
 
 class QueryRequest(BaseModel):
@@ -144,10 +139,11 @@ class SchemesResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health payload; handler wraps failures so this model is best-effort."""
+    """`ready` is always true once the process serves traffic (never tied to RAG)."""
 
     status: str = Field(default="healthy")
     ready: bool = Field(default=True)
+    rag_available: bool = Field(default=False)
     message: str = Field(default="")
     schemes_loaded: int = Field(default=0)
     memory_mb: Optional[float] = None
@@ -174,21 +170,32 @@ def _load_schemes_only() -> List[str]:
         return []
 
 
-def _fallback_query_response(query: str) -> Dict[str, Any]:
-    """Safe answers when Chroma / RAG cannot run."""
+def _fallback_query_response(query: str, *, reason: str = "unavailable") -> Dict[str, Any]:
+    """Safe answers when Chroma / RAG cannot run or timed out."""
     q = (query or "").strip()
-    hint = (
-        "This service is running without a loaded vector index. "
-        "Add Chroma data under `data/indexed/` (or set INDEXED_DATA_PATH) and redeploy. "
-        "For official information visit https://www.hdfcfund.com/"
-    )
     if not q:
         return {"answer": "Please enter a question.", "status": "error"}
+
+    if reason == "timeout":
+        body = (
+            "The AI retrieval layer is still warming up or the last request hit a time limit. "
+            "Please wait a few seconds and try again with a shorter question. "
+            "Official fund information: https://www.hdfcfund.com/"
+        )
+    elif reason == "query_timeout":
+        body = (
+            "That request took too long to complete. The service may be under load or still "
+            "loading models. Try again in a moment. Official information: https://www.hdfcfund.com/"
+        )
+    else:
+        body = (
+            "The full RAG index is not available on this deployment (Chroma/embeddings could not "
+            "be initialized). Add indexed data under `data/indexed/` or set INDEXED_DATA_PATH. "
+            "Official information: https://www.hdfcfund.com/"
+        )
+
     return {
-        "answer": (
-            f"I can't search the fund corpus right now ({hint}). "
-            f"Your question was: «{q[:200]}»."
-        ),
+        "answer": f"{body}\n\n(Your question: «{q[:200]}»)",
         "source": None,
         "source_link": "https://www.hdfcfund.com/",
         "last_updated": None,
@@ -207,80 +214,155 @@ def _vector_fetch_k() -> int:
     return vk
 
 
-def ensure_rag_engine() -> None:
-    """
-    Lazy-init full RAG once. On failure: degraded mode, no crash.
-    Does not run at import time or before first query.
-    """
-    global rag_orchestrator, _chroma_loaded
-    global _rag_init_attempted, _rag_init_error, _degraded_no_rag
+def _sync_init_rag_body() -> None:
+    """Heavy RAG init (Chroma client, collection). Runs in worker thread; no asyncio here."""
+    global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out
 
-    if rag_orchestrator is not None or _degraded_no_rag:
+    if rag_orchestrator is not None:
+        return
+    if _rag_init_timed_out:
+        logger.info("Skipping RAG init — previous attempt timed out (fallback active).")
         return
 
-    with _rag_init_lock:
-        if rag_orchestrator is not None or _degraded_no_rag:
-            return
-        _rag_init_attempted = True
-        try:
-            before = _memory_mb()
-            logger.info("Lazy-loading RAG orchestrator (before ~%.1f MB)", before or -1)
+    before = _memory_mb()
+    logger.info(
+        "RAG init thread start — RAM ~%.1f MB | protobuf_impl=%s",
+        before or -1,
+        os.environ.get("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "(unset)"),
+    )
 
-            from orchestrator import RAGOrchestrator
+    try:
+        from orchestrator import RAGOrchestrator
 
-            indexed_data_path = _indexed_dir()
-            use_bm25 = _bool_env("USE_BM25", False)
-            use_reranker = _bool_env("USE_RERANKER", False)
-            vk = _vector_fetch_k()
+        indexed_data_path = _indexed_dir()
+        logger.info("Chroma persist path: %s", indexed_data_path)
 
-            rag_orchestrator = RAGOrchestrator(
-                persist_directory=indexed_data_path,
-                scheme_names=_schemes,
-                use_bm25=use_bm25,
-                use_reranker=use_reranker,
-                vector_fetch_k=vk,
-            )
-            _chroma_loaded = True
-            gc.collect()
-            after = _memory_mb()
-            logger.info("RAG orchestrator ready (after ~%.1f MB)", after or -1)
-        except Exception as e:
-            _rag_init_error = str(e)
-            _degraded_no_rag = True
+        use_bm25 = _bool_env("USE_BM25", False)
+        use_reranker = _bool_env("USE_RERANKER", False)
+        vk = _vector_fetch_k()
+
+        orch = RAGOrchestrator(
+            persist_directory=indexed_data_path,
+            scheme_names=_schemes,
+            use_bm25=use_bm25,
+            use_reranker=use_reranker,
+            vector_fetch_k=vk,
+        )
+
+        if _rag_init_timed_out:
             logger.warning(
-                "RAG / Chroma initialization failed — entering degraded mode (no crash): %s",
-                e,
-                exc_info=True,
+                "RAG init finished after timeout — discarding orchestrator to stay in fallback mode."
             )
+            return
+
+        rag_orchestrator = orch
+        _chroma_loaded = True
+        gc.collect()
+        after = _memory_mb()
+        logger.info(
+            "Chroma + orchestrator OK — RAM ~%.1f MB | embedding loads on first query",
+            after or -1,
+        )
+    except Exception as e:
+        err = str(e)
+        _rag_init_error = err
+        _degraded_no_rag = True
+        logger.warning(
+            "RAG / Chroma init FAILED — fallback mode. Error type=%s msg=%s",
+            type(e).__name__,
+            err[:500],
+            exc_info=True,
+        )
+        if "protobuf" in err.lower() or "descriptor" in err.lower():
+            logger.warning(
+                "Possible protobuf/grpc issue — try PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python "
+                "(already defaulted in app bootstrap)."
+            )
+
+
+async def ensure_rag_engine_async(request: Request) -> None:
+    """
+    Lazy-init RAG with hard wall clock. Never blocks forever.
+    Serialised per-process via app.state.rag_lock.
+    """
+    global _rag_init_attempted, _degraded_no_rag, _rag_init_error, _rag_init_timed_out
+
+    if rag_orchestrator is not None:
+        return
+    if _degraded_no_rag and _rag_init_attempted:
+        return
+
+    lock = request.app.state.rag_lock
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 20.0), 120.0))
+
+    async with lock:
+        if rag_orchestrator is not None:
+            return
+        if _degraded_no_rag and _rag_init_attempted:
+            return
+
+        _rag_init_attempted = True
+        logger.info(
+            "Starting bounded RAG init (max %.0fs) | groq_key_present=%s",
+            init_timeout,
+            _has_groq_key(),
+        )
+
+        try:
+            async with asyncio.timeout(init_timeout):
+                await asyncio.to_thread(_sync_init_rag_body)
+        except TimeoutError:
+            _rag_init_timed_out = True
+            _degraded_no_rag = True
+            _rag_init_error = _rag_init_error or f"init exceeded {init_timeout:.0f}s"
+            logger.warning(
+                "RAG_INIT_TIMEOUT — skipping heavy stack; degraded mode ON (%.0fs)",
+                init_timeout,
+            )
+        except Exception:
+            logger.exception("ensure_rag_engine_async outer failure")
+            _degraded_no_rag = True
+            _rag_init_error = _rag_init_error or "async init wrapper failed"
 
 
 def _run_query_sync(query: str) -> Dict[str, Any]:
     if rag_orchestrator is None:
-        return _fallback_query_response(query)
-    out = rag_orchestrator.answer_query(query)
+        return _fallback_query_response(query, reason="unavailable")
+    try:
+        out = rag_orchestrator.answer_query(query)
+    except Exception as e:
+        logger.exception("answer_query failed: %s", e)
+        return _fallback_query_response(query, reason="unavailable")
+
     global _model_loaded
-    _model_loaded = True  # embedding path exercised after first successful answer
+    _model_loaded = True
+    logger.info("Query path OK — embedding/LLM stack exercised")
     gc.collect()
     return out
 
 
 def _build_health_response() -> HealthResponse:
     mock_mode = not _has_groq_key()
-    degraded = _degraded_no_rag
-    if rag_orchestrator is not None:
-        msg = "RAG online"
+    rag_available = rag_orchestrator is not None
+    degraded = not rag_available and (_degraded_no_rag or _rag_init_timed_out)
+
+    if rag_available:
+        msg = "Full RAG available"
         if mock_mode:
-            msg += " · LLM mock (set GROQ_API_KEY for Groq)"
+            msg += " · LLM in demo mode (set GROQ_API_KEY for Groq)"
+    elif _rag_init_timed_out:
+        msg = "Fallback mode: RAG init timed out — placeholder answers"
     elif _degraded_no_rag:
-        msg = "Degraded: index unavailable — placeholder answers only"
+        msg = "Fallback mode: RAG unavailable — placeholder answers"
         if _rag_init_error:
-            msg += f" ({_rag_init_error[:120]})"
+            msg += f" ({_rag_init_error[:100]})"
     else:
-        msg = "API ready — RAG loads on first query"
+        msg = "API up — RAG loads on first question (bounded init)"
 
     return HealthResponse(
         status="healthy",
-        ready=_api_ready,
+        ready=True,
+        rag_available=rag_available,
         message=msg,
         schemes_loaded=len(_schemes),
         memory_mb=_memory_mb(),
@@ -299,7 +381,8 @@ def _health_safe() -> HealthResponse:
         return HealthResponse(
             status="healthy",
             ready=True,
-            message="Health readout degraded internally; process is up.",
+            rag_available=False,
+            message="Health readout failed internally; process is up.",
             schemes_loaded=0,
             memory_mb=None,
             model_loaded=False,
@@ -311,11 +394,15 @@ def _health_safe() -> HealthResponse:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _schemes, _api_ready
+    global _schemes
+    app.state.rag_lock = asyncio.Lock()
+
     logger.info(
-        "HDFC MF API boot — BASE=%s RAM=%.1f MB",
+        "HDFC MF API boot — BASE=%s RAM=%.1f MB | protobuf=%s | groq_key=%s",
         BASE,
         _memory_mb() or -1,
+        os.environ.get("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "(unset)"),
+        "yes" if _has_groq_key() else "no (mock LLM when RAG runs)",
     )
     try:
         _schemes = _load_schemes_only()
@@ -323,12 +410,10 @@ async def lifespan(app: FastAPI):
         logger.exception("Scheme load failed; continuing with empty schemes")
         _schemes = []
 
-    _api_ready = True
     mem = _memory_mb()
     logger.info(
-        "Startup complete — api_ready=True schemes=%s mock_llm=%s RAM=%.1f MB",
+        "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB",
         len(_schemes),
-        not _has_groq_key(),
         mem or -1,
     )
     yield
@@ -338,7 +423,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.1.0",
+    version="2.2.0",
     lifespan=lifespan,
 )
 
@@ -367,7 +452,7 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Never raises; always JSON-serializable."""
+    """Never raises; `ready` always true when this handler runs."""
     return _health_safe()
 
 
@@ -380,20 +465,20 @@ async def get_schemes():
 
 
 @app.post("/query", response_model=QueryResponse)
-async def query_fund(request: QueryRequest):
-    q = (request.query or "").strip()
+async def query_fund(request: Request, body: QueryRequest):
+    q = (body.query or "").strip()
     if not q:
         return QueryResponse(answer="Please enter a question.", status="error")
 
-    timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
+    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
 
     try:
-        await asyncio.to_thread(ensure_rag_engine)
+        await ensure_rag_engine_async(request)
     except Exception:
-        logger.exception("ensure_rag_engine failed")
+        logger.exception("ensure_rag_engine_async failed")
 
     try:
-        async with asyncio.timeout(timeout_s):
+        async with asyncio.timeout(query_timeout_s):
             response = await asyncio.to_thread(_run_query_sync, q)
         return QueryResponse(
             answer=response.get("answer", "") or "No answer returned.",
@@ -403,22 +488,18 @@ async def query_fund(request: QueryRequest):
             status=response.get("status", "error"),
         )
     except TimeoutError:
-        logger.warning("Query timed out after %ss", timeout_s)
-        return QueryResponse(
-            answer="The request took too long. Try again with a shorter question.",
-            status="timeout",
-        )
+        logger.warning("Query timed out after %ss", query_timeout_s)
+        fb = _fallback_query_response(q, reason="query_timeout")
+        return QueryResponse(answer=fb["answer"], status="timeout")
     except Exception:
         logger.exception("Query failed")
-        return QueryResponse(
-            answer=_fallback_query_response(q)["answer"],
-            status="error",
-        )
+        fb = _fallback_query_response(q, reason="unavailable")
+        return QueryResponse(answer=fb["answer"], status="error")
 
 
 @app.post("/chat", response_model=QueryResponse)
-async def chat_with_history(request: QueryRequest):
-    return await query_fund(request)
+async def chat_with_history(request: Request, body: QueryRequest):
+    return await query_fund(request, body)
 
 
 if __name__ == "__main__":

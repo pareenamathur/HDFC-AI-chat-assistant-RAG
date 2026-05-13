@@ -27,6 +27,7 @@ export type HealthResponse = {
   status: string;
   message?: string;
   ready?: boolean;
+  rag_available?: boolean;
   schemes_loaded?: number;
   memory_mb?: number | null;
   model_loaded?: boolean;

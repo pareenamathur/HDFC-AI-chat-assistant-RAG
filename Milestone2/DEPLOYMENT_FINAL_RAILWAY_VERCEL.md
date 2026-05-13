@@ -20,15 +20,18 @@
 
 ### `GET /health` (never fails)
 
-Returns **`status: healthy`** and **`ready: true`** once the worker has finished startup — **even with no Railway env vars** and **even if Chroma is missing** (then `degraded: true` after the first failed RAG init attempt).
+Returns **`status: healthy`** and **`ready: true`** whenever this handler runs — **not** gated on embeddings, Chroma, or Groq. Use **`rag_available`** for full RAG.
 
 | Field | Meaning |
 |-------|---------|
-| `ready` | Process accepted traffic (always `true` after boot). |
+| `ready` | Always **`true`** here — API process is serving routes. |
+| `rag_available` | Full RAG stack initialized (`true` after successful bounded init). |
 | `mock_mode` | No `GROQ_API_KEY` — LLM uses MockLLM when RAG runs. |
-| `chroma_loaded` | Chroma-backed retriever initialized. |
+| `chroma_loaded` | Chroma client + collection opened during RAG init. |
 | `model_loaded` | At least one successful embedding-backed query completed. |
-| `degraded` | RAG init failed (e.g. missing index); `/query` returns placeholders. |
+| `degraded` | Fallback only: RAG init failed or hit **`RAG_INIT_TIMEOUT_SECONDS`** (default 20s). |
+
+Bounded RAG init: set **`RAG_INIT_TIMEOUT_SECONDS`** (default **20**, max 120) to avoid hanging deploy health checks on slow model download.
 
 ---
 
@@ -48,6 +51,7 @@ Returns **`status: healthy`** and **`ready: true`** once the worker has finished
    | `GROQ_API_KEY` | `gsk_…` | Optional; without it the app uses **MockLLM** (still boots). |
    | `CORS_ALLOW_ORIGINS` | `https://your-app.vercel.app` | Comma-separated; use `*` only for debugging. |
    | `QUERY_TIMEOUT_SECONDS` | `90` | Max time for one `/query` request (async). |
+   | `RAG_INIT_TIMEOUT_SECONDS` | `20` | Max time for first Chroma/orchestrator init (then fallback). |
    | `LLM_TIMEOUT_SECONDS` | `60` | Groq call wall time. |
    | `VECTOR_FETCH_K` | `10` | Lower = less RAM (bounds 4–24 internally). |
    | `USE_BM25` | `false` | Keep false on low-memory plans. |
