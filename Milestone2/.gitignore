@@ -29,7 +29,7 @@ wheels/
 # data/html/
 # data/documents/
 # data/processed/
-# data/indexed/
+data/indexed/
 
 # Logs
 *.log
@@ -48,3 +48,10 @@ Thumbs.db
 
 # ChromaDB
 .chroma/
+chroma_db/
+
+# Models directory
+models/
+
+# Jupyter notebooks
+.ipynb_checkpoints/

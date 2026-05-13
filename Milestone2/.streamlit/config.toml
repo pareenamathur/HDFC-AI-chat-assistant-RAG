@@ -1,14 +1,31 @@
+[server]
+# Production-optimized server settings
+maxUploadSize = 200  # MB
+maxMessageSize = 200  # MB
+enableCORS = false
+enableXsrfProtection = true
+enableWebsocketCompression = true
+
+[browser]
+# Browser configuration for stability
+gatherUsageStats = false
+showErrorDetails = false
+
 [theme]
-base = "dark"
-primaryColor = "#00d4aa"
-backgroundColor = "#0a0e27"
-secondaryBackgroundColor = "#1a1f3a"
-textColor = "#e5e7eb"
+# Professional theme settings
+primaryColor = "#4ECDC4"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7FA"
+textColor = "#2C3E50"
 font = "sans serif"
 
-[client]
-showErrorDetails = true
-maxUploadSize = 200
-
 [logger]
+# Optimized logging for production
 level = "info"
+messageFormat = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[client]
+# Client-side optimizations
+caching = true
+displayEnabled = true
+showErrorDetails = false

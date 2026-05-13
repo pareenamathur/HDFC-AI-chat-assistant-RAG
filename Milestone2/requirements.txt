@@ -1,52 +1,36 @@
-# Mutual Fund FAQ Assistant - Project Dependencies
-# Phase 1.1 - Fetcher and beyond
+# Streamlit Production Requirements - Memory Optimized
+# Lightweight dependencies for stable Streamlit deployment
 
-# Web Scraping
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
+# Core Streamlit Framework
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
 
-# Configuration
-pyyaml>=6.0
-
-# PDF Processing (for Phase 1.2)
-PyMuPDF>=1.23.0
-unstructured>=0.10.0
-
-# OCR (for Phase 1.2 - fallback)
-pytesseract>=0.3.10
-Pillow>=10.0.0
-
-# Table Extraction (for Phase 1.2)
-camelot-py[cv]>=0.11.0
-
-# Embeddings (for Phase 1.5)
-# Uses ChromaDB's SentenceTransformerEmbeddingFunction
-chromadb>=0.4.0
-sentence-transformers>=2.2.0
-torch>=2.0.0
-
-# Vector Database (for Phase 1.6)
-# ChromaDB already listed above for local persistence
-
-# Backend API (for Phase 3)
-fastapi>=0.104.0
-uvicorn>=0.24.0
-pydantic>=2.0.0
-
-# Frontend (for Phase 4)
-# React + Vite dependencies managed via npm
-
-# Testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-pytest-mock>=3.11.0
-
-# Evaluation (for Phase 5)
-ragas>=0.1.0
-
-# Utilities
+# Environment Configuration
 python-dotenv>=1.0.0
-tqdm>=4.66.0
-thefuzz>=0.20.0
+
+# Vector Database & Embeddings (CPU-only)
+chromadb>=0.4.0
+
+# ML Libraries (CPU-only PyTorch)
+# Force CPU-only installation to avoid CUDA dependencies
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.0.0+cpu
+
+# Search & Retrieval (BM25 disabled for memory savings)
 rank-bm25>=0.2.2
+
+# AI Model APIs
+openai>=1.3.0
+groq>=0.4.0
+
+# Essential Utilities (minimal set)
+tqdm>=4.65.0
+thefuzz>=0.20.0
+psutil>=5.9.0
+
+# Sentence Transformers (lightweight model only)
+sentence-transformers>=2.2.0
+
+# Text Processing
+regex>=2023.0.0
