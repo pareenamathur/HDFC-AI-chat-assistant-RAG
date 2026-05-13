@@ -1,6 +1,7 @@
 import os
 import gc
 import logging
+import time
 from typing import List, Dict, Any, Optional
 
 import chromadb
@@ -120,6 +121,18 @@ class HybridRetriever:
         top_k_hybrid: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Vector-first retrieval; optional BM25 fusion and CrossEncoder rerank."""
+        t_wall = time.perf_counter()
+        q_preview = (query or "")[:160]
+        logger.info(
+            "retriever.search START model=%s n_results=%s fetch_k=%s where=%s query_preview=%r",
+            self.embedding_model_name,
+            n_results,
+            top_k_hybrid if top_k_hybrid is not None else self.vector_fetch_k,
+            filters,
+            q_preview,
+        )
+
+        t0 = time.perf_counter()
         model = self._ensure_embedding_model()
         query_embedding = model.encode(
             query,
@@ -127,6 +140,12 @@ class HybridRetriever:
             show_progress_bar=False,
             batch_size=1,
         ).tolist()
+        emb_dim = len(query_embedding) if isinstance(query_embedding, list) else -1
+        logger.info(
+            "retriever.search STAGE=encode OK ms=%.1f embedding_dim=%s",
+            (time.perf_counter() - t0) * 1000,
+            emb_dim,
+        )
 
         if filters == {}:
             filters = None
@@ -135,21 +154,58 @@ class HybridRetriever:
         if self.use_reranker and self.reranker:
             fetch_k = min(max(fetch_k, n_results), 50)
 
-        vector_results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=fetch_k,
-            where=filters,
-            include=["documents", "metadatas", "distances"],
+        t0 = time.perf_counter()
+        try:
+            vector_results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=fetch_k,
+                where=filters,
+                include=["documents", "metadatas", "distances"],
+            )
+        except Exception as e:
+            err = str(e).lower()
+            logger.exception(
+                "retriever.search STAGE=chroma_query FAILED ms=%.1f embedding_dim=%s where=%s err_type=%s",
+                (time.perf_counter() - t0) * 1000,
+                emb_dim,
+                filters,
+                type(e).__name__,
+            )
+            if "dimension" in err or "embedding" in err:
+                logger.error(
+                    "Possible embedding dimension mismatch vs index. "
+                    "Rebuild with: python scripts/rebuild_chroma_from_chunks.py --force "
+                    "(index must use same model as HybridRetriever: %s).",
+                    self.embedding_model_name,
+                )
+            raise
+
+        logger.info(
+            "retriever.search STAGE=chroma_query OK ms=%.1f",
+            (time.perf_counter() - t0) * 1000,
         )
 
         vector_hits = []
-        if vector_results["ids"]:
-            for i in range(len(vector_results["ids"][0])):
+        ids_outer = vector_results.get("ids") or []
+        if ids_outer and ids_outer[0]:
+            row_ids = ids_outer[0]
+            docs_row = (vector_results.get("documents") or [[]])[0] or []
+            metas_row = (vector_results.get("metadatas") or [[]])[0] or []
+            dist_row = (vector_results.get("distances") or [[]])[0] or []
+            n = len(row_ids)
+            for i in range(n):
+                doc_i = docs_row[i] if i < len(docs_row) else None
+                meta_i = metas_row[i] if i < len(metas_row) else None
+                dist_i = dist_row[i] if i < len(dist_row) else 1.0
+                try:
+                    score = 1.0 - float(dist_i)
+                except (TypeError, ValueError):
+                    score = 0.0
                 vector_hits.append({
-                    "id": vector_results["ids"][0][i],
-                    "text": vector_results["documents"][0][i],
-                    "metadata": vector_results["metadatas"][0][i],
-                    "score": 1 - vector_results["distances"][0][i],
+                    "id": row_ids[i],
+                    "text": (doc_i if doc_i is not None else "") or "",
+                    "metadata": meta_i if isinstance(meta_i, dict) else {},
+                    "score": score,
                 })
 
         if self.use_bm25 and self.bm25:
@@ -176,11 +232,21 @@ class HybridRetriever:
             candidates = vector_hits[:fetch_k]
 
         if not candidates:
+            logger.info(
+                "retriever.search END hits_out=0 total_ms=%.1f (no vector hits after query)",
+                (time.perf_counter() - t_wall) * 1000,
+            )
             return []
 
         if self.use_reranker and self.reranker:
+            t0 = time.perf_counter()
             pairs = [[query, c["text"]] for c in candidates]
             rerank_scores = self.reranker.predict(pairs)
+            logger.info(
+                "retriever.search STAGE=rerank OK ms=%.1f candidates=%s",
+                (time.perf_counter() - t0) * 1000,
+                len(candidates),
+            )
             for i, candidate in enumerate(candidates):
                 candidate["rerank_score"] = float(rerank_scores[i])
             final_results = sorted(
@@ -203,6 +269,13 @@ class HybridRetriever:
                 )[:n_results]
 
         gc.collect()
+        logger.info(
+            "retriever.search END hits_out=%s total_ms=%.1f reranker=%s bm25=%s",
+            len(final_results),
+            (time.perf_counter() - t_wall) * 1000,
+            bool(self.use_reranker and self.reranker),
+            bool(self.use_bm25 and self.bm25),
+        )
         return final_results
 
 

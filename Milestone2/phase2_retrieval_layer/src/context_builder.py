@@ -1,4 +1,7 @@
 from typing import List, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ContextBuilder:
     """Formats retrieved results into context for the LLM."""
@@ -15,6 +18,7 @@ class ContextBuilder:
             intent: Detected intent to highlight specific metadata.
         """
         if not results:
+            logger.info("ContextBuilder: empty results → placeholder context")
             return "No relevant context found."
 
         # Group results by scheme_name to produce one section per fund
@@ -22,8 +26,13 @@ class ContextBuilder:
         grouped: dict = defaultdict(list)
         order: list = []  # preserve insertion order
         for res in results:
+            if not isinstance(res, dict):
+                logger.warning("ContextBuilder: skipping non-dict result %r", type(res))
+                continue
             meta = res.get("metadata") or {}
-            sn = meta.get("scheme_name", "Unknown Scheme")
+            if not isinstance(meta, dict):
+                meta = {}
+            sn = str(meta.get("scheme_name", "Unknown Scheme") or "Unknown Scheme")
             if sn not in grouped:
                 order.append(sn)
             grouped[sn].append(res)
@@ -35,22 +44,24 @@ class ContextBuilder:
             context_blocks.append(f"=== FUND: {scheme_name} ===")
             for res in grouped[scheme_name]:
                 meta = res.get("metadata") or {}
+                if not isinstance(meta, dict):
+                    meta = {}
                 text = (res.get("text") or "").strip()
 
                 # Enrich with structured data if relevant to intent
                 structured_info = []
                 if intent:
                     sd_key = f"sd_{intent}"
-                    if sd_key in meta:
+                    if sd_key in meta and meta[sd_key] is not None:
                         structured_info.append(
-                            f"Factual {intent.replace('_', ' ')}: {meta[sd_key]}"
+                            f"Factual {intent.replace('_', ' ')}: {str(meta[sd_key])}"
                         )
 
                 # Common fields to always include if present
                 for field in ["expense_ratio", "exit_load", "nav", "risk_level"]:
-                    if field in meta and meta[field]:
+                    if field in meta and meta[field] is not None and meta[field] != "":
                         structured_info.append(
-                            f"{field.replace('_', ' ').title()}: {meta[field]}"
+                            f"{field.replace('_', ' ').title()}: {str(meta[field])}"
                         )
 
                 block = (
@@ -64,7 +75,14 @@ class ContextBuilder:
                 context_blocks.append(block)
                 global_idx += 1
 
-        return "\n\n".join(context_blocks)
+        built = "\n\n".join(context_blocks)
+        logger.info(
+            "ContextBuilder: built context blocks=%s total_chars=%s schemes=%s",
+            len(context_blocks),
+            len(built),
+            len(order),
+        )
+        return built
 
 if __name__ == "__main__":
     # Test

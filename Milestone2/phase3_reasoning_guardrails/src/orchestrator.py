@@ -2,7 +2,9 @@ import sys
 import os
 import logging
 import re
-from typing import Dict, Any, Optional
+import time
+import traceback
+from typing import Dict, Any, Optional, List
 
 # Add Phase 2 and Phase 3 src to path
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -69,86 +71,186 @@ class RAGOrchestrator:
             logger.exception("Retriever.search failed (%s)", label)
             return []
 
+    @staticmethod
+    def _log_chunk_preview(results: List[Dict[str, Any]], max_chars: int = 180) -> None:
+        if not results:
+            logger.info("chunk_preview: (no chunks)")
+            return
+        r0 = results[0]
+        meta = r0.get("metadata") or {}
+        text = (r0.get("text") or "")[:max_chars]
+        logger.info(
+            "chunk_preview: first id=%s scheme_name=%r text_len=%s text_preview=%r",
+            r0.get("id"),
+            meta.get("scheme_name"),
+            len(r0.get("text") or ""),
+            text,
+        )
+
     def answer_query(self, query: str) -> Dict[str, Any]:
         """Main entry point to get an answer."""
-        
-        # 1. Process Query
-        proc = self.qp.process_query(query)
-        filters = proc['filters']
-        intent = proc['intent']
+        wall0 = time.perf_counter()
+        q = (query or "").strip()
+        logger.info("answer_query START query_len=%s preview=%r", len(q), q[:200])
 
-        # 2. Retrieve Chunks
-        all_results = []
-        is_multi = False
-        
-        # Check for multiple schemes
-        if filters and "scheme_name" in filters:
-            scheme_filter = filters["scheme_name"]
-            if isinstance(scheme_filter, dict) and "$in" in scheme_filter:
-                is_multi = True
-                schemes = scheme_filter["$in"]
-                logger.info(f"Multi-fund query detected. Schemes: {schemes}")
-                
-                # Retrieve chunks for each scheme to ensure context for all
-                for scheme in schemes:
-                    logger.info(f"Retrieving context for: {scheme}")
-                    scheme_results = self._safe_search(
-                        query,
-                        3,
-                        {"scheme_name": scheme},
-                        f"multi-fund:{scheme[:48]}",
-                    )
-                    all_results.extend(scheme_results)
-            else:
-                logger.info(f"Single-fund query detected: {scheme_filter}")
-                all_results = self._safe_search(
-                    query,
-                    4,
-                    filters,
-                    "single-fund",
-                )
-        else:
-            logger.info("No specific fund filter detected. Performing general search.")
-            all_results = self._safe_search(
-                query,
-                5,
-                None,
-                "general",
+        # --- Stage: process_query ---
+        t0 = time.perf_counter()
+        try:
+            proc = self.qp.process_query(q)
+            filters = proc["filters"]
+            intent = proc["intent"]
+        except Exception as e:
+            logger.exception(
+                "answer_query STAGE=process_query FAILED after_ms=%.1f err=%s",
+                (time.perf_counter() - t0) * 1000,
+                type(e).__name__,
             )
+            logger.error("answer_query STAGE=process_query traceback:\n%s", traceback.format_exc())
+            raise
 
         logger.info(
-            "RAG retrieval — chunk_count=%s intent=%s",
+            "answer_query STAGE=process_query OK ms=%.1f filters=%s intent=%s",
+            (time.perf_counter() - t0) * 1000,
+            filters,
+            intent,
+        )
+
+        # --- Stage: retrieval ---
+        t0 = time.perf_counter()
+        all_results: List[Dict[str, Any]] = []
+        is_multi = False
+
+        try:
+            if filters and "scheme_name" in filters:
+                scheme_filter = filters["scheme_name"]
+                if isinstance(scheme_filter, dict) and "$in" in scheme_filter:
+                    is_multi = True
+                    schemes = scheme_filter["$in"]
+                    logger.info("Retrieval mode=multi-fund schemes_count=%s", len(schemes))
+
+                    for scheme in schemes:
+                        scheme_results = self._safe_search(
+                            q,
+                            3,
+                            {"scheme_name": scheme},
+                            f"multi-fund:{str(scheme)[:48]}",
+                        )
+                        all_results.extend(scheme_results)
+                else:
+                    logger.info("Retrieval mode=single-fund scheme=%r", scheme_filter)
+                    all_results = self._safe_search(q, 4, filters, "single-fund")
+            else:
+                logger.info("Retrieval mode=general (no scheme filter)")
+                all_results = self._safe_search(q, 5, None, "general")
+        except Exception as e:
+            logger.exception(
+                "answer_query STAGE=retrieval FAILED after_ms=%.1f err=%s",
+                (time.perf_counter() - t0) * 1000,
+                type(e).__name__,
+            )
+            raise
+
+        logger.info(
+            "answer_query STAGE=retrieval OK ms=%.1f chunk_count=%s intent=%s",
+            (time.perf_counter() - t0) * 1000,
             len(all_results),
             intent,
         )
+        self._log_chunk_preview(all_results)
 
         if not all_results and filters:
             logger.warning(
                 "No chunks with scheme filters %s — falling back to general vector search",
                 filters,
             )
-            all_results = self._safe_search(query, 8, None, "general-fallback-after-empty-filters")
-            logger.info("RAG retrieval after fallback — chunk_count=%s", len(all_results))
+            t_fb = time.perf_counter()
+            all_results = self._safe_search(q, 8, None, "general-fallback-after-empty-filters")
+            logger.info(
+                "answer_query STAGE=retrieval_fallback ms=%.1f chunk_count=%s",
+                (time.perf_counter() - t_fb) * 1000,
+                len(all_results),
+            )
+            self._log_chunk_preview(all_results)
 
         if not all_results:
+            logger.info(
+                "answer_query END status=no_results total_ms=%.1f",
+                (time.perf_counter() - wall0) * 1000,
+            )
             return {
                 "answer": "I'm sorry, I couldn't find any information about that in my records.",
                 "source": None,
-                "status": "no_results"
+                "status": "no_results",
             }
 
-        # 3. Build Context
-        context = self.builder.build_context(all_results, intent=intent)
+        # --- Stage: build_context ---
+        t0 = time.perf_counter()
+        try:
+            context = self.builder.build_context(all_results, intent=intent)
+        except Exception as e:
+            logger.exception(
+                "answer_query STAGE=build_context FAILED after_ms=%.1f err=%s chunks=%s",
+                (time.perf_counter() - t0) * 1000,
+                type(e).__name__,
+                len(all_results),
+            )
+            logger.error("answer_query STAGE=build_context traceback:\n%s", traceback.format_exc())
+            raise
 
-        # 4. Generate Response with Answer Generator (Groq)
-        raw_answer = self._get_generator().generate_answer(query, context, multi_fund=is_multi)
-        
-        # 5. Post-process and apply URL Policy
-        final_response = self._apply_policy(raw_answer, all_results)
-        
+        ctx_len = len(context or "")
+        logger.info(
+            "answer_query STAGE=build_context OK ms=%.1f context_chars=%s multi_fund=%s",
+            (time.perf_counter() - t0) * 1000,
+            ctx_len,
+            is_multi,
+        )
+        if ctx_len == 0 or (context or "").strip() == "No relevant context found.":
+            logger.warning("answer_query: context empty or placeholder despite chunk_count=%s", len(all_results))
+
+        # --- Stage: llm_generate ---
+        t0 = time.perf_counter()
+        try:
+            raw_answer = self._get_generator().generate_answer(q, context, multi_fund=is_multi)
+        except Exception as e:
+            logger.exception(
+                "answer_query STAGE=llm_generate FAILED after_ms=%.1f err=%s context_chars=%s",
+                (time.perf_counter() - t0) * 1000,
+                type(e).__name__,
+                ctx_len,
+            )
+            logger.error("answer_query STAGE=llm_generate traceback:\n%s", traceback.format_exc())
+            raise
+
+        ans_preview = (raw_answer or "")[:200] if isinstance(raw_answer, str) else repr(raw_answer)[:200]
+        logger.info(
+            "answer_query STAGE=llm_generate OK ms=%.1f answer_type=%s answer_preview=%r",
+            (time.perf_counter() - t0) * 1000,
+            type(raw_answer).__name__,
+            ans_preview,
+        )
+
+        # --- Stage: apply_policy ---
+        t0 = time.perf_counter()
+        try:
+            final_response = self._apply_policy(raw_answer, all_results)
+        except Exception as e:
+            logger.exception(
+                "answer_query STAGE=apply_policy FAILED after_ms=%.1f err=%s",
+                (time.perf_counter() - t0) * 1000,
+                type(e).__name__,
+            )
+            logger.error("answer_query STAGE=apply_policy traceback:\n%s", traceback.format_exc())
+            raise
+
+        logger.info(
+            "answer_query STAGE=apply_policy OK ms=%.1f final_status=%s total_ms=%.1f",
+            (time.perf_counter() - t0) * 1000,
+            final_response.get("status"),
+            (time.perf_counter() - wall0) * 1000,
+        )
         return final_response
 
-    def _apply_policy(self, answer: str, results: list) -> Dict[str, Any]:
+    def _apply_policy(self, answer: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Ensures the response follows the URL and sentence constraints."""
         if not isinstance(answer, str) or answer is None:
             logger.warning("_apply_policy: LLM returned non-string answer — coercing to empty")
@@ -170,6 +272,8 @@ class RAGOrchestrator:
             # Get the top result's metadata
             top_result = results[0]
             metadata = top_result.get("metadata", {})
+            if not isinstance(metadata, dict):
+                metadata = {}
             
             # Extract source information
             scheme_name = metadata.get("scheme_name", "Unknown Scheme")

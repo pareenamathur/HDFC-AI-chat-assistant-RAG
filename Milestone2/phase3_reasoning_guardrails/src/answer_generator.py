@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Dict, Any, Optional
 from llm_client import LLMProvider
 
@@ -21,9 +22,21 @@ class AnswerGenerator:
         """
         system_prompt = self._get_system_prompt(multi_fund)
         user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
-        
-        logger.info("Generating answer with LLM...")
-        return self.llm.generate(system_prompt, user_prompt)
+
+        ctx_n = len(context or "")
+        logger.info(
+            "AnswerGenerator: LLM call starting context_chars=%s multi_fund=%s",
+            ctx_n,
+            multi_fund,
+        )
+        t0 = time.perf_counter()
+        out = self.llm.generate(system_prompt, user_prompt)
+        logger.info(
+            "AnswerGenerator: LLM call finished ms=%.1f answer_chars=%s",
+            (time.perf_counter() - t0) * 1000,
+            len(out or ""),
+        )
+        return out
 
     def _get_system_prompt(self, multi_fund: bool = False) -> str:
         """Returns the strict system instructions for the LLM."""
