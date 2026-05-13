@@ -22,7 +22,8 @@ class ContextBuilder:
         grouped: dict = defaultdict(list)
         order: list = []  # preserve insertion order
         for res in results:
-            sn = res["metadata"].get("scheme_name", "Unknown Scheme")
+            meta = res.get("metadata") or {}
+            sn = meta.get("scheme_name", "Unknown Scheme")
             if sn not in grouped:
                 order.append(sn)
             grouped[sn].append(res)
@@ -33,8 +34,8 @@ class ContextBuilder:
         for scheme_name in order:
             context_blocks.append(f"=== FUND: {scheme_name} ===")
             for res in grouped[scheme_name]:
-                meta = res["metadata"]
-                text = res["text"]
+                meta = res.get("metadata") or {}
+                text = (res.get("text") or "").strip()
 
                 # Enrich with structured data if relevant to intent
                 structured_info = []

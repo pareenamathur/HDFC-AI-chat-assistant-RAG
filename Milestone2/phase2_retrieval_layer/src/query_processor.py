@@ -13,7 +13,8 @@ class QueryProcessor:
     _STOP = {
         'hdfc', 'direct', 'plan', 'growth', 'nav', 'mutual',
         'performance', 'portfolio', 'index', 'fund', 'and', 'of',
-        'the', 'equal', 'weight', 'top', 'fof', 'etf', 'bse',
+        'the', 'equal', 'weight', 'fof', 'etf', 'bse',
+        # NOTE: do not include 'top' — needed to distinguish "HDFC Top 100" vs funds that only share "100"
     }
 
     # Intent keyword → metadata field mapping
@@ -107,6 +108,14 @@ class QueryProcessor:
             if not is_dup:
                 deduped.append(s)
         found_schemes = deduped
+
+        # Avoid matching half the corpus via a single weak token (e.g. "100") → huge $in lists / Chroma stress
+        if len(found_schemes) > 8:
+            logger.warning(
+                "extract_filters: %s schemes matched query; capping to 8 most-specific (longest fingerprints)",
+                len(found_schemes),
+            )
+            found_schemes = found_schemes[:8]
 
         # Fallback: no verbatim match — use fuzzy best-match
         if not found_schemes:

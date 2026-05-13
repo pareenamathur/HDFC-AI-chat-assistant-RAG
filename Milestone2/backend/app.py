@@ -614,7 +614,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.6",
+    version="2.2.7",
     lifespan=lifespan,
 )
 

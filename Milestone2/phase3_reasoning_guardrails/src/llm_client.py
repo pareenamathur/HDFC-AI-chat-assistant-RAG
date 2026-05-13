@@ -51,7 +51,11 @@ class GroqProvider(LLMProvider):
             ],
             temperature=0,
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        if content is None or not isinstance(content, str):
+            logger.warning("Groq returned empty or non-string message content")
+            return ""
+        return content
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         timeout_s = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))

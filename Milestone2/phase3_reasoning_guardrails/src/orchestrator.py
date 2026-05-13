@@ -51,6 +51,24 @@ class RAGOrchestrator:
             gc.collect()
         return self._generator
 
+    def _safe_search(
+        self,
+        query: str,
+        n_results: int,
+        filters,
+        label: str,
+    ):
+        """Chroma/embedding failures must not take down the whole answer path."""
+        try:
+            return self.retriever.search(
+                query=query,
+                n_results=n_results,
+                filters=filters,
+            )
+        except Exception:
+            logger.exception("Retriever.search failed (%s)", label)
+            return []
+
     def answer_query(self, query: str) -> Dict[str, Any]:
         """Main entry point to get an answer."""
         
@@ -74,25 +92,28 @@ class RAGOrchestrator:
                 # Retrieve chunks for each scheme to ensure context for all
                 for scheme in schemes:
                     logger.info(f"Retrieving context for: {scheme}")
-                    scheme_results = self.retriever.search(
-                        query=query,
-                        n_results=3, # 3 per fund
-                        filters={"scheme_name": scheme}
+                    scheme_results = self._safe_search(
+                        query,
+                        3,
+                        {"scheme_name": scheme},
+                        f"multi-fund:{scheme[:48]}",
                     )
                     all_results.extend(scheme_results)
             else:
                 logger.info(f"Single-fund query detected: {scheme_filter}")
-                all_results = self.retriever.search(
-                    query=query,
-                    n_results=4,
-                    filters=filters
+                all_results = self._safe_search(
+                    query,
+                    4,
+                    filters,
+                    "single-fund",
                 )
         else:
             logger.info("No specific fund filter detected. Performing general search.")
-            all_results = self.retriever.search(
-                query=query,
-                n_results=5,
-                filters=None
+            all_results = self._safe_search(
+                query,
+                5,
+                None,
+                "general",
             )
 
         logger.info(
@@ -100,6 +121,14 @@ class RAGOrchestrator:
             len(all_results),
             intent,
         )
+
+        if not all_results and filters:
+            logger.warning(
+                "No chunks with scheme filters %s — falling back to general vector search",
+                filters,
+            )
+            all_results = self._safe_search(query, 8, None, "general-fallback-after-empty-filters")
+            logger.info("RAG retrieval after fallback — chunk_count=%s", len(all_results))
 
         if not all_results:
             return {
@@ -121,7 +150,10 @@ class RAGOrchestrator:
 
     def _apply_policy(self, answer: str, results: list) -> Dict[str, Any]:
         """Ensures the response follows the URL and sentence constraints."""
-        
+        if not isinstance(answer, str) or answer is None:
+            logger.warning("_apply_policy: LLM returned non-string answer — coercing to empty")
+            answer = ""
+
         # Check if "don't know" or similar is in answer
         refusal_keywords = ["don't know", "do not have enough information", "not found", "cannot answer"]
         is_refusal = any(kw in answer.lower() for kw in refusal_keywords)
