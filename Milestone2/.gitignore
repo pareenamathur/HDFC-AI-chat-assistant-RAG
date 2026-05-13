@@ -58,3 +58,8 @@ models/
 
 # Jupyter notebooks
 .ipynb_checkpoints/
+
+# Next.js / Node (frontend)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
