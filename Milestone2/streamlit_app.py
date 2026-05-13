@@ -280,6 +280,12 @@ def _panel_search() -> None:
     st.subheader("Search")
     st.caption("One question at a time—best for NAV, loads, ratios, and scheme facts.")
 
+    # Suggestion buttons cannot assign to `search_q` after `st.text_input(key="search_q")`
+    # in the same run — Streamlit raises StreamlitAPIException. Store pending text, rerun,
+    # then apply it here before the widget is created.
+    if "_search_suggestion_pending" in st.session_state:
+        st.session_state["search_q"] = st.session_state.pop("_search_suggestion_pending")
+
     with st.container(border=True):
         q = st.text_input(
             "Your question",
@@ -294,7 +300,7 @@ def _panel_search() -> None:
         for i, suggestion in enumerate(SUGGESTED_PROMPTS):
             short = suggestion if len(suggestion) <= 52 else suggestion[:49] + "…"
             if cols[i].button(short, key=f"sug_{i}", use_container_width=True):
-                st.session_state.search_q = suggestion
+                st.session_state["_search_suggestion_pending"] = suggestion
                 st.rerun()
 
     if go and q.strip():
