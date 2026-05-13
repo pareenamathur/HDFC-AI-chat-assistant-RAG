@@ -1,6 +1,8 @@
 """
 HDFC Mutual Fund Assistant — FastAPI production API (Railway / Docker).
 Boots with zero env vars; RAG is lazy; failures → degraded answers, never stuck ready=false.
+
+Paths: all data paths resolve against the package root (directory containing `backend/`), never cwd.
 """
 
 from __future__ import annotations
@@ -33,10 +35,11 @@ try:
 except Exception:
     pass
 
-# backend/app.py -> Milestone2/
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(BASE, "phase2_retrieval_layer", "src"))
-sys.path.insert(0, os.path.join(BASE, "phase3_reasoning_guardrails", "src"))
+# backend/app.py -> Milestone2/ (single source of truth for data paths — independent of process cwd)
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
+BASE: str = str(BASE_DIR)
+sys.path.insert(0, str(BASE_DIR / "phase2_retrieval_layer" / "src"))
+sys.path.insert(0, str(BASE_DIR / "phase3_reasoning_guardrails" / "src"))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
@@ -93,11 +96,30 @@ def _cors_origins() -> List[str]:
 
 
 def _has_groq_key() -> bool:
-    return bool(_str_env("GROQ_API_KEY", ""))
+    """Explicit os.getenv — Railway injects GROQ_API_KEY; never log the value."""
+    return bool((os.getenv("GROQ_API_KEY") or "").strip())
+
+
+def _resolve_data_path(env_name: str, default_relative: str) -> str:
+    """
+    Resolve INDEXED_DATA_PATH / PROCESSED_DATA_PATH against BASE_DIR when relative.
+    Railway cwd may not be Milestone2; relative env values must not depend on cwd.
+    """
+    raw = _str_env(env_name, "")
+    if not raw:
+        return str((BASE_DIR / default_relative).resolve())
+    p = Path(raw)
+    if p.is_absolute():
+        return str(p.resolve())
+    return str((BASE_DIR / p).resolve())
 
 
 def _indexed_dir() -> str:
-    return _str_env("INDEXED_DATA_PATH", "") or os.path.join(BASE, "data", "indexed")
+    return _resolve_data_path("INDEXED_DATA_PATH", "data/indexed")
+
+
+def _processed_dir() -> str:
+    return _resolve_data_path("PROCESSED_DATA_PATH", "data/processed")
 
 
 def _chroma_index_on_disk() -> bool:
@@ -148,14 +170,14 @@ class SchemesResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """`ready` = HTTP API live. `rag_available` = Chroma+RAGOrchestrator up. `rag_ready` = first retrieval done."""
+    """ready=API up; rag_available=orchestrator up; rag_ready=first successful /query answer path."""
 
     status: str = Field(default="healthy")
     ready: bool = Field(default=True)
     rag_available: bool = Field(default=False)
     rag_ready: bool = Field(
         default=False,
-        description="True after first successful embedding-backed query (not just Chroma open).",
+        description="True after first successful POST /query (embedding + answer path completed).",
     )
     message: str = Field(default="")
     schemes_loaded: int = Field(default=0)
@@ -166,13 +188,13 @@ class HealthResponse(BaseModel):
     degraded: bool = Field(default=False)
     index_on_disk: bool = Field(
         default=False,
-        description="True if chroma.sqlite3 exists at INDEXED_DATA_PATH (RAG still lazy until first /query).",
+        description="True if chroma.sqlite3 exists at resolved INDEXED_DATA_PATH.",
     )
 
 
 def _load_schemes_only() -> List[str]:
-    processed = _str_env("PROCESSED_DATA_PATH", "") or os.path.join(BASE, "data", "processed")
-    chunked_data_path = os.path.join(processed, "chunked_data_phase1.4.json")
+    processed = _processed_dir()
+    chunked_data_path = str(Path(processed) / "chunked_data_phase1.4.json")
     if not os.path.exists(chunked_data_path):
         logger.warning("Chunked data missing at %s — schemes list empty.", chunked_data_path)
         return []
@@ -180,7 +202,7 @@ def _load_schemes_only() -> List[str]:
         with open(chunked_data_path, "r", encoding="utf-8") as f:
             chunks = json.load(f)
         schemes = sorted({c["scheme_name"] for c in chunks})
-        logger.info("Loaded %s scheme names (startup)", len(schemes))
+        logger.info("Loaded %s scheme names from %s", len(schemes), chunked_data_path)
         return schemes
     except Exception as e:
         logger.exception("Failed loading schemes: %s", e)
@@ -236,6 +258,7 @@ def _sync_init_rag_body() -> None:
     global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out
 
     if rag_orchestrator is not None:
+        logger.info("RAG init skipped — orchestrator already present.")
         return
     if _rag_init_timed_out:
         logger.info("Skipping RAG init — previous attempt timed out (fallback active).")
@@ -243,7 +266,10 @@ def _sync_init_rag_body() -> None:
 
     before = _memory_mb()
     logger.info(
-        "RAG init thread start — RAM ~%.1f MB | protobuf_impl=%s",
+        "RAG init thread start — BASE_DIR=%s | cwd=%s | indexed=%s | RAM ~%.1f MB | protobuf_impl=%s",
+        BASE_DIR,
+        os.getcwd(),
+        _indexed_dir(),
         before or -1,
         os.environ.get("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "(unset)"),
     )
@@ -252,7 +278,7 @@ def _sync_init_rag_body() -> None:
         from orchestrator import RAGOrchestrator
 
         indexed_data_path = _indexed_dir()
-        logger.info("Chroma persist path: %s", indexed_data_path)
+        logger.info("Chroma persist path (resolved): %s | exists=%s", indexed_data_path, os.path.isdir(indexed_data_path))
 
         use_bm25 = _bool_env("USE_BM25", False)
         use_reranker = _bool_env("USE_RERANKER", False)
@@ -312,7 +338,6 @@ async def ensure_rag_engine_async(request: Request) -> None:
         return
 
     lock = request.app.state.rag_lock
-    # First init downloads MiniLM + opens Chroma — default 120s for cold Railway
     init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
 
     async with lock:
@@ -322,10 +347,11 @@ async def ensure_rag_engine_async(request: Request) -> None:
             return
 
         _rag_init_attempted = True
+        groq_present = _has_groq_key()
         logger.info(
-            "Starting bounded RAG init (max %.0fs) | groq_key_present=%s",
+            "Starting bounded RAG init (max %.0fs) | groq_key_present=%s (from os.getenv GROQ_API_KEY, value not logged)",
             init_timeout,
-            _has_groq_key(),
+            groq_present,
         )
 
         try:
@@ -347,8 +373,10 @@ async def ensure_rag_engine_async(request: Request) -> None:
 
 def _run_query_sync(query: str) -> Dict[str, Any]:
     if rag_orchestrator is None:
+        logger.warning("_run_query_sync: no orchestrator — returning fallback")
         return _fallback_query_response(query, reason="unavailable")
     try:
+        logger.info("Running answer_query (first call may load MiniLM embeddings)…")
         out = rag_orchestrator.answer_query(query)
     except Exception as e:
         logger.exception("answer_query failed: %s", e)
@@ -356,7 +384,7 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
 
     global _model_loaded
     _model_loaded = True
-    logger.info("Query path OK — embedding/LLM stack exercised")
+    logger.info("Query path OK — embedding/LLM stack exercised; rag_ready will reflect on /health")
     gc.collect()
     return out
 
@@ -386,7 +414,7 @@ def _build_health_response() -> HealthResponse:
             msg += " mock_mode=true means GROQ_API_KEY is unset (LLM demo when RAG runs)."
     else:
         msg = (
-            "No chroma.sqlite3 at INDEXED_DATA_PATH — clone may be missing data/indexed/ "
+            "No chroma.sqlite3 at resolved INDEXED_DATA_PATH — clone may be missing data/indexed/ "
             "or path is wrong. Rebuild: python scripts/rebuild_chroma_from_chunks.py --force"
         )
         if mock_mode:
@@ -423,9 +451,9 @@ def _health_safe() -> HealthResponse:
             memory_mb=None,
             model_loaded=False,
             chroma_loaded=False,
-            mock_mode=True,
+            mock_mode=not _has_groq_key(),
             degraded=True,
-            index_on_disk=False,
+            index_on_disk=_chroma_index_on_disk(),
         )
 
 
@@ -434,12 +462,19 @@ async def lifespan(app: FastAPI):
     global _schemes
     app.state.rag_lock = asyncio.Lock()
 
+    groq_present = _has_groq_key()
     logger.info(
-        "HDFC MF API boot — BASE=%s RAM=%.1f MB | protobuf=%s | groq_key=%s",
-        BASE,
-        _memory_mb() or -1,
+        "HDFC MF API boot — BASE_DIR=%s | cwd=%s | groq_key_present=%s (GROQ_API_KEY via os.getenv, not logged) | protobuf=%s",
+        BASE_DIR,
+        os.getcwd(),
+        groq_present,
         os.environ.get("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "(unset)"),
-        "yes" if _has_groq_key() else "no (mock LLM when RAG runs)",
+    )
+    logger.info(
+        "Resolved paths — indexed=%s | processed=%s | index_on_disk=%s",
+        _indexed_dir(),
+        _processed_dir(),
+        _chroma_index_on_disk(),
     )
     try:
         _schemes = _load_schemes_only()
@@ -450,11 +485,9 @@ async def lifespan(app: FastAPI):
     mem = _memory_mb()
     logger.info(
         "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB | "
-        "chroma.sqlite3 at %s: %s | mock_mode in /health = missing GROQ only.",
+        "mock_mode on /health = not groq_key_present.",
         len(_schemes),
         mem or -1,
-        _indexed_dir(),
-        _chroma_index_on_disk(),
     )
     yield
     logger.info("HDFC MF API shutdown")
@@ -463,7 +496,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.1",
+    version="2.2.2",
     lifespan=lifespan,
 )
 
@@ -510,16 +543,18 @@ async def query_fund(request: Request, body: QueryRequest):
     if not q:
         return QueryResponse(answer="Please enter a question.", status="error")
 
+    # First request: RAG init (bounded) + answer — allow enough wall time for both phases
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
     query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
+    combined_ceiling = min(600.0, init_timeout + query_timeout_s + 30.0)
+
+    logger.info("POST /query — begin RAG lazy init if needed, then answer (combined ceiling ~%.0fs)", combined_ceiling)
 
     try:
-        await ensure_rag_engine_async(request)
-    except Exception:
-        logger.exception("ensure_rag_engine_async failed")
-
-    try:
-        async with asyncio.timeout(query_timeout_s):
-            response = await asyncio.to_thread(_run_query_sync, q)
+        async with asyncio.timeout(combined_ceiling):
+            await ensure_rag_engine_async(request)
+            async with asyncio.timeout(query_timeout_s):
+                response = await asyncio.to_thread(_run_query_sync, q)
         return QueryResponse(
             answer=response.get("answer", "") or "No answer returned.",
             source=response.get("source"),
@@ -528,7 +563,7 @@ async def query_fund(request: Request, body: QueryRequest):
             status=response.get("status", "error"),
         )
     except TimeoutError:
-        logger.warning("Query timed out after %ss", query_timeout_s)
+        logger.warning("POST /query timed out (combined init+answer ceiling ~%.0fs)", combined_ceiling)
         fb = _fallback_query_response(q, reason="query_timeout")
         return QueryResponse(answer=fb["answer"], status="timeout")
     except Exception:
