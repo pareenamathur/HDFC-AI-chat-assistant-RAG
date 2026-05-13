@@ -185,7 +185,7 @@ class HealthResponse(BaseModel):
     memory_mb: Optional[float] = None
     model_loaded: bool = Field(
         default=False,
-        description="True after first successful answer_query (includes LLM / generator path).",
+        description="True once SentenceTransformer is loaded and retrieval is operational (warm or first /query).",
     )
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
@@ -259,7 +259,7 @@ def _vector_fetch_k() -> int:
 
 def _sync_init_rag_body() -> None:
     """Heavy RAG init (Chroma client, collection). Runs in worker thread; no asyncio here."""
-    global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out, _retrieval_warmed
+    global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out, _retrieval_warmed, _model_loaded
 
     if rag_orchestrator is not None:
         logger.info("RAG init skipped — orchestrator already present.")
@@ -316,9 +316,11 @@ def _sync_init_rag_body() -> None:
             try:
                 orch.warm_retrieval_stack()
                 _retrieval_warmed = True
+                _model_loaded = True
                 mem2 = _memory_mb()
+                logger.info("Embedding model loaded successfully for retrieval (SentenceTransformer + probe search).")
                 logger.info(
-                    "Embedding + retrieval warm complete — rag_ready on /health (RAM ~%.1f MB).",
+                    "model_loaded set to True — embedding stack operational (RAM ~%.1f MB). /health rag_ready + model_loaded.",
                     mem2 or -1,
                 )
             except Exception as e_w:
@@ -409,9 +411,9 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
         return _fallback_query_response(query, reason="unavailable")
 
     global _model_loaded, _retrieval_warmed
-    _model_loaded = True
     _retrieval_warmed = True
-    logger.info("Query path OK — embedding/LLM stack exercised; /health model_loaded + rag_ready")
+    _model_loaded = True
+    logger.info("Query path OK — answer_query completed; model_loaded set to True (retrieval + LLM path exercised).")
     gc.collect()
     return out
 
@@ -548,7 +550,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.4",
+    version="2.2.5",
     lifespan=lifespan,
 )
 
