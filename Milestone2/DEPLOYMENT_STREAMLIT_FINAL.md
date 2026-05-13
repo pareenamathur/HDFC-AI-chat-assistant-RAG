@@ -1,418 +1,168 @@
-# HDFC Mutual Fund Assistant - Streamlit Final Deployment Plan
+# HDFC Mutual Fund Assistant — Streamlit Cloud (Single App)
 
-## Overview
-**Single Streamlit Application Architecture** - Modern UI with memory optimizations for production deployment
-
-### 🎯 Deployment Goals
-- ✅ Single lightweight Streamlit deployment
-- ✅ Professional modern UI/UX
-- ✅ Prevent Streamlit memory crashes
-- ✅ Keep AI features functional
-- ✅ Production-ready stability
+This document is the **authoritative** deployment guide. Legacy Railway / Render / Vercel multi-service flows are **not** used.
 
 ---
 
-## 🚀 Architecture Changes
+## 0. Repository layout (required for Streamlit Cloud)
 
-### ❌ REMOVED (Previous Multi-Service)
-- Railway backend deployment
-- Render backend deployment  
-- Vercel frontend deployment
-- FastAPI backend service
-- Multi-service complexity
+### If `Milestone2/` is the Git repository root
 
-### ✅ NEW (Single Streamlit App)
-- One unified Streamlit application
-- Embedded AI functionality
-- Modern professional UI
-- Memory-optimized deployment
-- Simple deployment process
+Use **Main file path:** `streamlit_app.py`  
+Use **Packages file** (Advanced): `requirements.txt` (repo root = `Milestone2/`).
 
----
-
-## 🎨 UI/UX Improvements (ISSUE 1 FIXED)
-
-### ❌ Previous Issues
-- Very basic UI
-- Unreadable text
-- Font colors and backgrounds clashed
-- Poor spacing/layout
-- Low-quality visual hierarchy
-
-### ✅ Professional Modern UI
-```css
-/* Professional theme with dark/light mode support */
-.main {
-    padding-top: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.stApp {
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-}
-
-/* Modern card styling */
-.card {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Professional buttons */
-.stButton > button {
-    background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
-    color: white;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-```
-
-#### ✅ UI Features
-- **Clean Layout**: Professional spacing and organization
-- **Typography**: Readable fonts with proper contrast
-- **Color Scheme**: Professional palette (#4ECDC4, #2C3E50)
-- **Modern Cards**: Clean containers with shadows
-- **Responsive Design**: Mobile-friendly layout
-- **Interactive Elements**: Hover effects and transitions
-- **Professional Sidebar**: System info and features
-- **Loading States**: Spinners and progress indicators
-- **Chat Interface**: Modern message bubbles
-- **Tab Navigation**: Organized content sections
-
----
-
-## 💾 Memory Optimizations (ISSUE 2 FIXED)
-
-### ❌ Previous Problem
-```
-"Your Streamlit app has gone over its resource limits"
-```
-
-### ✅ Memory Optimization Implementation
-
-#### 1. **Lightweight AI Models**
-```python
-# BEFORE: Heavy models
-embedding_model_name: str = "BAAI/bge-small-en-v1.5"  # ~500MB
-
-# AFTER: Lightweight model  
-embedding_model_name: str = "all-MiniLM-L6-v2"  # ~200MB
-```
-
-#### 2. **Lazy Loading Everything**
-```python
-@st.cache_resource
-def load_orchestrator():
-    """Load RAG orchestrator with caching to prevent multiple instances."""
-    # Models load ONLY on first use
-    # No heavy startup initialization
-    # Cache models globally
-```
-
-#### 3. **Streamlit Caching**
-```python
-# Resource caching
-@st.cache_resource  # For models, embeddings
-@st.cache_data      # For data, schemes
-```
-
-#### 4. **RAM Usage Reduction**
-- **CPU-only PyTorch**: No CUDA/GPU dependencies
-- **No nvidia-* packages**: Eliminated GPU libraries
-- **BM25 Disabled**: Memory-intensive search disabled
-- **Reranker Disabled**: Heavy reranking disabled
-- **Single Instance**: Prevent duplicate model loading
-
-#### 5. **ChromaDB Optimization**
-- **Persistent storage**: Lightweight on-disk database
-- **On-demand loading**: Collections load only when needed
-- **No full DB in RAM**: Memory-efficient access
-
----
-
-## 📁 Final Project Structure
-
-```
+```text
 Milestone2/
-├── streamlit_app.py              # Main Streamlit application
-├── requirements.txt               # Lightweight production requirements
-├── .streamlit/
-│   └── config.toml             # Streamlit configuration
-├── data/                       # Data directory
-│   ├── indexed/                 # ChromaDB storage
-│   └── processed/               # Processed data files
-├── phase2_retrieval_layer/       # RAG retrieval components
-├── phase3_reasoning_guardrails/   # RAG orchestrator
-└── DEPLOYMENT_STREAMLIT_FINAL.md # This deployment plan
+├── streamlit_app.py
+├── requirements.txt
+├── .streamlit/config.toml
+├── data/indexed/
+├── data/processed/
+├── phase2_retrieval_layer/
+└── phase3_reasoning_guardrails/
 ```
+
+### If the Git repo root is **above** `Milestone2/` (e.g. Desktop monorepo)
+
+A **root** `streamlit_app.py` at the repository root (next to the `Milestone2/` folder) forwards into `Milestone2/streamlit_app.py`.
+
+- **Main file path:** `streamlit_app.py` (at repo root — **not** inside `Milestone2/`).
+- **Packages file:** `Milestone2/requirements.txt` (do **not** use the repo-root `requirements.txt` on Desktop; it pulls unrelated heavy deps).
+- **Secrets / env:** unchanged (`GROQ_API_KEY`, etc.).
+
+Optional: point **Main file path** to `Milestone2/streamlit_app.py` instead — either works if that file is committed.
 
 ---
 
-## ⚙️ Configuration Files
+## 1. Streamlit Cloud setup (GitHub)
 
-### requirements.txt (Optimized)
-```txt
-# Streamlit Production Requirements - Memory Optimized
-streamlit>=1.28.0
-pandas>=2.0.0
-numpy>=1.24.0
-chromadb>=0.4.0
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.0.0+cpu
-openai>=1.3.0
-groq>=0.4.0
-psutil>=5.9.0
-sentence-transformers>=2.2.0
-```
+1. Push the repo to GitHub.
+2. In [Streamlit Cloud](https://streamlit.io/cloud): **New app** → repo → branch **`main`** → **Main file** `streamlit_app.py` (or `Milestone2/streamlit_app.py` if nested).
+3. **Secrets** (for real LLM answers):
 
-### .streamlit/config.toml (Production)
-```toml
-[server]
-maxUploadSize = 200
-maxMessageSize = 200
-enableCORS = false
-enableXsrfProtection = true
+   ```toml
+   GROQ_API_KEY = "your-groq-api-key"
+   ```
 
-[theme]
-primaryColor = "#4ECDC4"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F5F7FA"
-textColor = "#2C3E50"
-```
+4. **Advanced** → Python **3.11** or **3.12** (matches local verification).
+
+### Environment variables (optional)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GROQ_API_KEY` | — | Groq LLM (Secrets). |
+| `INDEXED_DATA_PATH` | `data/indexed` | Chroma directory (relative to cwd). |
+| `PROCESSED_DATA_PATH` | `data/processed` | Folder with `chunked_data_phase1.4.json`. |
+| `USE_BM25` | `false` | `true` only with `rank-bm25` installed + higher RAM. |
+| `USE_RERANKER` | `false` | Keep `false` on Cloud. |
+| `STREAMLIT_VECTOR_FETCH_K` | `12` | Lower → less RAM. |
+| `STREAMLIT_PROTOBUF_PYTHON_IMPL` | _(unset)_ | Set to `python` only if protobuf/grpc errors persist after redeploy (pure-Python runtime). Prefer pinned `requirements.txt`. |
 
 ---
 
-## 🚀 Deployment Steps
+## 2. Dependencies (`requirements.txt`)
 
-### 1. **Local Setup**
+- **Protobuf:** `protobuf==3.20.3` (pinned in `requirements.txt`). If `pip` reports dependency clashes with **chromadb/grpc**, relax pins or use `STREAMLIT_PROTOBUF_PYTHON_IMPL` / resolver overrides per environment.
+- **CPU-only PyTorch:** `torch==2.2.2+cpu` + `--extra-index-url https://download.pytorch.org/whl/cpu`  
+  (`torch==2.0.0+cpu` is **not** published for Python 3.12+; `2.2.2+cpu` is CPU-only and Cloud-safe.)
+- **Embeddings:** `sentence-transformers` → **`all-MiniLM-L6-v2`** (default in `HybridRetriever`).
+- **Vector store:** `chromadb>=1.0.0,<2` (prebuilt wheels on Linux Cloud; avoids source builds).
+- **LLM:** `groq` (optional **MockLLM** if no key).
+- **Not included:** `pandas`, `numpy`, `openai`, `rank-bm25` (BM25 off by default).
+
+Local run:
+
 ```bash
-# Install dependencies
+cd Milestone2   # or your project root containing streamlit_app.py
 pip install -r requirements.txt
-
-# Test locally
 streamlit run streamlit_app.py
 ```
 
-### 2. **Streamlit Cloud Deployment**
-```bash
-# Deploy to Streamlit Cloud
-streamlit deploy
-
-# OR use GitHub integration
-# Connect repository to Streamlit Cloud
-# Automatic deployment on push
-```
-
-### 3. **Environment Variables**
-```bash
-# Required for Streamlit Cloud
-OPENAI_API_KEY=your_openai_api_key
-GROQ_API_KEY=your_groq_api_key
-DATA_PATH=/app/data
-INDEXED_DATA_PATH=/app/data/indexed
-PROCESSED_DATA_PATH=/app/data/processed
-```
+**Windows note:** If `pip install` fails building `chroma-hnswlib`, upgrade pip and retry, or use **WSL/Linux**; Streamlit Cloud uses **Linux** wheels and typically installs without compiling.
 
 ---
 
-## 📊 Performance Results
+## 3. Streamlit configuration (`.streamlit/config.toml`)
 
-### Memory Usage (Optimized)
-| Stage | Memory Usage | Status |
-|--------|--------------|---------|
-| App Startup | ~50MB | ✅ Under limits |
-| Lazy Load | ~200MB | ✅ Under limits |
-| Peak Usage | ~250MB | ✅ Under limits |
-| Streamlit Limit | 1GB | ✅ Safe margin |
-
-### Model Performance
-| Component | Before | After | Improvement |
-|-----------|--------|-------|-------------|
-| Embedding Model | BAAI/bge-small-en-v1.5 | all-MiniLM-L6-v2 | 60% smaller |
-| Startup Time | ~30s | ~5s | 83% faster |
-| Memory Usage | ~500MB | ~250MB | 50% reduction |
+- **Theme:** Slate text (`#1E293B`), teal primary (`#0F766E`), light backgrounds — compatible with **dark mode** toggle in the app menu.
+- **Server:** `headless`, upload caps, `fileWatcherType = "none"`.
+- **Runner:** `fastReruns`, `magicEnabled = false`.
 
 ---
 
-## 🎯 Key Features
+## 4. Obsolete deployment artifacts
 
-### ✅ Professional UI
-- **Modern Design**: Clean, professional interface
-- **Responsive Layout**: Works on all devices
-- **Interactive Elements**: Smooth transitions and hover effects
-- **Color Consistency**: Professional color palette
-- **Typography**: Readable fonts with proper contrast
-
-### ✅ Memory Optimization
-- **Lazy Loading**: Models load only when needed
-- **Caching**: Streamlit resource and data caching
-- **CPU-Only**: No GPU dependencies
-- **Lightweight Models**: all-MiniLM-L6-v2 embedding model
-- **BM25/Reranker Disabled**: Memory-intensive features off
-
-### ✅ Streamlit Features
-- **Tab Navigation**: Search, Chat, Schemes
-- **Chat Interface**: Modern message bubbles
-- **Search Functionality**: Intelligent query processing
-- **Scheme Information**: Available mutual fund data
-- **Memory Monitoring**: Real-time RAM usage display
-- **Error Handling**: Graceful error messages
+Not used for Streamlit Cloud: Railway, Vercel, FastAPI as a separate service. Optional files under `backend/` are **not** the Cloud entrypoint.
 
 ---
 
-## 🔧 Technical Optimizations
+## 5. Summary — memory optimizations
 
-### 1. **Memory Management**
-```python
-def get_memory_usage():
-    """Get current memory usage in MB."""
-    try:
-        import psutil
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        return memory_info.rss / 1024 / 1024
-    except ImportError:
-        return "Unknown (psutil not available)"
-```
-
-### 2. **Lazy Loading**
-```python
-@st.cache_resource
-def load_orchestrator():
-    """Load RAG orchestrator with caching."""
-    # Only loads on first query
-    # Prevents multiple instances
-    # Cached for subsequent uses
-```
-
-### 3. **Streamlit Caching**
-```python
-@st.cache_resource  # For models, embeddings
-@st.cache_data      # For data, schemes
-```
+| Area | Change |
+|------|--------|
+| **Embedding** | `all-MiniLM-L6-v2` only; lazy-loaded once (`_ensure_embedding_model`). |
+| **Torch** | CPU index wheels — **no CUDA** packages. |
+| **Thread caps** | `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `TOKENIZERS_PARALLELISM` before imports. |
+| **BM25 / reranker** | **Off** by default — no full-corpus `get()`, no `CrossEncoder`. |
+| **Chroma** | Bounded `query` size via `vector_fetch_k`. |
+| **LLM** | Lazy `AnswerGenerator` on first answer. |
+| **No API key** | `MockLLM` — app still starts. |
+| **Caching** | `@st.cache_resource` orchestrator; `@st.cache_data` scheme list. |
+| **GC** | `gc.collect()` after query / heavy paths. |
 
 ---
 
-## 🚨 Error Prevention
+## 6. Summary — UI / UX
 
-### Memory Crashes - FIXED
-- **Before**: "Streamlit app has gone over its resource limits"
-- **After**: Stable ~250MB peak usage
-- **Solution**: Lazy loading + lightweight models + caching
-
-### UI Issues - FIXED
-- **Before**: Basic, unreadable interface
-- **After**: Professional modern UI
-- **Solution**: Custom CSS + responsive design
-
-### Deployment Complexity - FIXED
-- **Before**: Multi-service (Railway + Vercel)
-- **After**: Single Streamlit app
-- **Solution**: Unified deployment architecture
+| Item | Implementation |
+|------|----------------|
+| **Contrast** | Theme CSS variables; alerts/chat inherit `--text-color`. |
+| **Typography** | Headers, captions, metrics; no forced white page chrome. |
+| **Layout** | Wide layout, bordered sections, tabs, expanded sidebar. |
+| **Primary buttons** | White label on theme primary for contrast. |
 
 ---
 
-## 🎉 Deployment Success Criteria
+## 7. Expected RAM (approximate RSS)
 
-### ✅ All Requirements Met
-1. **Single Streamlit deployment** ✅
-2. **Professional UI/UX** ✅
-3. **Memory crash prevention** ✅
-4. **AI features functional** ✅
-5. **Production-ready** ✅
+| Phase | RSS |
+|-------|-----|
+| After startup (before first query) | ~80–140 MB |
+| After first retrieval | ~220–320 MB |
+| Peak | ~280–400 MB with defaults |
 
-### ✅ Issues Fixed
-1. **UI Quality** - Professional modern interface ✅
-2. **Resource Limits** - Memory optimized ✅
-3. **Deployment Complexity** - Single app ✅
+Reduce `STREAMLIT_VECTOR_FETCH_K` to `8` if needed.
 
 ---
 
-## 🚀 Final Deployment Command
+## 8. Troubleshooting
 
-### Local Development
-```bash
-# Install requirements
-pip install -r requirements.txt
-
-# Run locally
-streamlit run streamlit_app.py --server.port 8501
-```
-
-### Streamlit Cloud
-```bash
-# Deploy to cloud
-streamlit deploy
-
-# Visit: https://your-app.streamlit.app
-```
+| Symptom | Mitigation |
+|---------|------------|
+| **Memory exceeded** | Keep BM25/reranker off; lower `STREAMLIT_VECTOR_FETCH_K`. |
+| **Empty index on Cloud** | `data/indexed/` must contain Chroma files — see `data/indexed/README.md` (index may be gitignored). |
+| **Mock answers** | Set `GROQ_API_KEY` in Secrets. |
+| **pip / Chroma on Windows** | Use Linux or ensure binary wheels; Cloud uses Linux. |
 
 ---
 
-## 📋 Verification Checklist
+## 9. Verification checklist
 
-### ✅ Pre-Deployment
-- [ ] App launches successfully
-- [ ] Memory usage stays low (<500MB)
-- [ ] UI is professional and readable
-- [ ] AI features work correctly
-- [ ] No resource limit errors
-
-### ✅ Post-Deployment
-- [ ] Streamlit Cloud app accessible
-- [ ] All tabs work correctly
-- [ ] Search functionality works
-- [ ] Chat interface works
-- [ ] Memory monitoring shows healthy usage
-- [ ] No crashes or errors
+- [ ] `pip install -r requirements.txt` succeeds on your target OS (or use Linux/WSL).
+- [ ] `streamlit run streamlit_app.py` — UI loads (HTTP 200).
+- [ ] Search runs after first query (model load).
+- [ ] Streamlit Cloud **Main file** path matches repo layout.
 
 ---
 
-## 🎯 Final Architecture
-
-### 🏆 Single Streamlit Application
-```
-┌─────────────────────────────────────┐
-│        Streamlit App             │
-│  ┌─────────────────────────┐    │
-│  │    Modern UI/UX       │    │
-│  │  • Professional Design │    │
-│  │  • Responsive Layout   │    │
-│  │  • Interactive Elements│    │
-│  └─────────────────────────┘    │
-│  ┌─────────────────────────┐    │
-│  │   Memory Optimized     │    │
-│  │  • Lazy Loading       │    │
-│  │  • Lightweight Models │    │
-│  │  • Caching           │    │
-│  └─────────────────────────┘    │
-│  ┌─────────────────────────┐    │
-│  │    AI Features        │    │
-│  │  • RAG System        │    │
-│  │  • Search & Chat     │    │
-│  │  • Scheme Info       │    │
-│  └─────────────────────────┘    │
-└─────────────────────────────────────┘
-```
-
-### 🎯 Deployment Simplicity
-- **One Application**: Streamlit only
-- **One Command**: `streamlit deploy`
-- **One Platform**: Streamlit Cloud
-- **Zero Complexity**: No backend/frontend split
+*Aligned with: single `streamlit_app.py`, CPU torch, Chroma 1.x, MiniLM, BM25/reranker off by default.*
 
 ---
 
-## 🏁 Conclusion
+## Optional — FastAPI backend + Next.js frontend (local only)
 
-**The HDFC Mutual Fund Assistant is now optimized for single Streamlit deployment with:**
+Not used on Streamlit Cloud. To run locally:
 
-✅ **Professional Modern UI** - Clean, readable, responsive design
-✅ **Memory Optimization** - ~250MB peak usage, no crashes
-✅ **Production Ready** - Stable, scalable, maintainable
-✅ **Simple Deployment** - One command, one platform
-✅ **Full AI Functionality** - All features preserved and working
-
-**Ready for Streamlit Cloud deployment with confidence!** 🚀
+1. **Backend:** from `Milestone2/backend/` run `pip install -r ../requirements.txt` (plus `fastapi`, `uvicorn`, `pydantic`) then `python app.py` → API at **http://127.0.0.1:8000**.
+2. **Frontend:** from `Milestone2/frontend/` run `npm install` then `npm run dev` → **http://localhost:3000** with `NEXT_PUBLIC_API_URL=http://localhost:8000` (see `frontend/.env.local`).
+3. Pin **`numpy<2`** if PyTorch reports NumPy ABI errors (already reflected in root `requirements.txt`).

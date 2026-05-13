@@ -12,24 +12,40 @@ sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
 from query_processor import QueryProcessor
 from retriever import HybridRetriever
 from context_builder import ContextBuilder
-from answer_generator import AnswerGenerator
-from llm_client import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
 class RAGOrchestrator:
     """Orchestrates the full RAG pipeline."""
 
-    def __init__(self, persist_directory: str, scheme_names: list, use_bm25: bool = True, use_reranker: bool = True):
+    def __init__(
+        self,
+        persist_directory: str,
+        scheme_names: list,
+        use_bm25: bool = True,
+        use_reranker: bool = True,
+        vector_fetch_k: int = 12,
+    ):
         self.qp = QueryProcessor(scheme_names)
         self.retriever = HybridRetriever(
             persist_directory=persist_directory,
             collection_name="mf_faq_corpus",
             use_bm25=use_bm25,
-            use_reranker=use_reranker
+            use_reranker=use_reranker,
+            vector_fetch_k=vector_fetch_k,
         )
         self.builder = ContextBuilder()
-        self.generator = AnswerGenerator(get_llm_provider())
+        self._generator = None
+
+    def _get_generator(self):
+        """Lazy LLM + AnswerGenerator so startup stays lightweight."""
+        if self._generator is None:
+            import gc
+            from answer_generator import AnswerGenerator
+            from llm_client import get_llm_provider
+            self._generator = AnswerGenerator(get_llm_provider())
+            gc.collect()
+        return self._generator
 
     def answer_query(self, query: str) -> Dict[str, Any]:
         """Main entry point to get an answer."""
@@ -86,7 +102,7 @@ class RAGOrchestrator:
         context = self.builder.build_context(all_results, intent=intent)
 
         # 4. Generate Response with Answer Generator (Groq)
-        raw_answer = self.generator.generate_answer(query, context, multi_fund=is_multi)
+        raw_answer = self._get_generator().generate_answer(query, context, multi_fund=is_multi)
         
         # 5. Post-process and apply URL Policy
         final_response = self._apply_policy(raw_answer, all_results)

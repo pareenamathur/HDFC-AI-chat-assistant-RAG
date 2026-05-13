@@ -50,35 +50,18 @@ class GroqProvider(LLMProvider):
         )
         return response.choices[0].message.content
 
-class OpenAIProvider(LLMProvider):
-    """OpenAI implementation."""
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
-        from openai import OpenAI
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
-
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0
-        )
-        return response.choices[0].message.content
-
 def get_llm_provider() -> LLMProvider:
-    """Factory to get the appropriate LLM provider. Groq is mandatory for production use."""
+    """
+    Resolve LLM backend: Groq (Streamlit Cloud) or MockLLM when no key is set.
+    Configure `GROQ_API_KEY` in Streamlit Secrets for production-quality answers.
+    """
     groq_api_key = os.getenv("GROQ_API_KEY")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
 
     if groq_api_key:
-        logger.info("Groq API Key found. Using GroqProvider.")
+        logger.info("Using GroqProvider.")
         return GroqProvider(groq_api_key)
-    elif openai_api_key:
-        logger.info("OpenAI API Key found. Using OpenAIProvider.")
-        return OpenAIProvider(openai_api_key)
-    else:
-        logger.error("No LLM API Key found. Production requires GROQ_API_KEY.")
-        raise ValueError("Missing GROQ_API_KEY. Please set it in your .env file.")
+    logger.warning(
+        "No GROQ_API_KEY — using MockLLM. "
+        "Add GROQ_API_KEY in Streamlit Cloud Secrets for live LLM answers."
+    )
+    return MockLLM()

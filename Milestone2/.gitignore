@@ -29,7 +29,9 @@ wheels/
 # data/html/
 # data/documents/
 # data/processed/
-data/indexed/
+# Chroma DB files (large); keep README so clone has folder + instructions
+data/indexed/*
+!data/indexed/README.md
 
 # Logs
 *.log

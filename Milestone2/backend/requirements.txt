@@ -17,7 +17,7 @@ chromadb>=0.4.0
 # Force CPU-only installation to avoid CUDA dependencies
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.0.0+cpu
-numpy>=1.24.0
+numpy>=1.26.0,<2
 pandas>=2.0.0
 
 # Search & Retrieval (BM25 disabled for free tier)
