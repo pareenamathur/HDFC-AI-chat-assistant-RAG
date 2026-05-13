@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -132,35 +133,74 @@ def _chroma_index_on_disk() -> bool:
 
 def _log_index_diagnostics() -> None:
     """Startup visibility for Railway path / index layout (no secrets)."""
-    idx = Path(_indexed_dir())
+    idx = Path(_indexed_dir()).resolve()
     sqlite = idx / "chroma.sqlite3"
     logger.info(
-        "RAG index diagnostics — INDEXED_DATA_PATH resolved=%s | chroma.sqlite3 exists=%s",
+        "RAG index diagnostics — BASE_DIR=%s | INDEXED_DATA_PATH absolute=%s | chroma.sqlite3 exists=%s",
+        BASE_DIR.resolve(),
         idx,
         sqlite.is_file(),
     )
+    if sqlite.is_file():
+        try:
+            sz = sqlite.stat().st_size
+            logger.info("chroma.sqlite3 size_bytes=%s (~%.2f MB)", sz, sz / (1024 * 1024))
+        except OSError as e:
+            logger.warning("Could not stat chroma.sqlite3: %s", e)
     try:
         if idx.is_dir():
-            names = sorted(p.name for p in idx.iterdir())
-            logger.info(
-                "indexed_dir entries count=%s sample=%s",
-                len(names),
-                names[:15],
-            )
+            entries = list(idx.iterdir())
+            names = sorted(p.name for p in entries)
+            logger.info("indexed_dir top-level entry count=%s names=%s", len(names), names[:40])
             seg_dirs = [n for n in names if len(n) == 36 and "-" in n]
-            logger.info("possible Chroma segment UUID dirs count=%s", len(seg_dirs))
+            logger.info("Chroma segment-style UUID dirs count=%s", len(seg_dirs))
         else:
             logger.warning("indexed_dir is not a directory: %s", idx)
     except Exception as e:
         logger.warning("Could not list indexed_dir: %s", e)
 
-    proc = Path(_processed_dir())
+    proc = Path(_processed_dir()).resolve()
     chunk = proc / "chunked_data_phase1.4.json"
     logger.info(
-        "processed corpus — dir=%s | chunked_data_phase1.4.json exists=%s",
+        "processed corpus — absolute=%s | chunked_data_phase1.4.json exists=%s",
         proc,
         chunk.is_file(),
     )
+    logger.info(
+        ".gitignore: data/indexed/chroma.sqlite3 is NOT ignored (only *.tmp / .DS_Store under data/indexed/). "
+        "Commit index files for Railway."
+    )
+
+
+def _sync_chroma_sqlite_probe() -> None:
+    """
+    Lightweight Chroma open + collection count before full RAG init.
+    Surfaces missing DB / wrong path / empty collection in logs independently of orchestrator.
+    """
+    path = str(Path(_indexed_dir()).resolve())
+    sqlite = Path(path) / "chroma.sqlite3"
+    if not sqlite.is_file():
+        logger.warning("STARTUP_CHROMA_PROBE skip — chroma.sqlite3 missing at %s", path)
+        return
+    try:
+        import chromadb
+
+        client = chromadb.PersistentClient(path=path)
+        coll = client.get_collection(name="mf_faq_corpus")
+        n = coll.count()
+        logger.info('Chroma collection opened (probe) — name="mf_faq_corpus" document_count=%s', n)
+        if n == 0:
+            logger.error(
+                "STARTUP_CHROMA_PROBE: collection empty — rebuild locally: "
+                "python scripts/rebuild_chroma_from_chunks.py --force then commit data/indexed/ and redeploy."
+            )
+        else:
+            logger.info("RAG index integrity check passed — Chroma mf_faq_corpus readable (probe).")
+    except Exception:
+        logger.exception(
+            "STARTUP_CHROMA_PROBE failed — corrupt index, wrong path, or Chroma mismatch. "
+            "Recovery: rebuild index, re-commit data/indexed/, redeploy Railway."
+        )
 
 
 def _memory_mb() -> Optional[float]:
@@ -252,6 +292,14 @@ def _fallback_query_response(query: str, *, reason: str = "unavailable") -> Dict
     if not q:
         return {"answer": "Please enter a question.", "status": "error"}
 
+    if reason in ("no_orchestrator", "query_failed", "unavailable"):
+        logger.warning(
+            "FALLBACK_RESPONSE reason=%s query_preview=%r\n%s",
+            reason,
+            q[:120],
+            "".join(traceback.format_stack(limit=18)),
+        )
+
     if reason == "timeout":
         body = (
             "The AI retrieval layer is still warming up or the last request hit a time limit. "
@@ -262,6 +310,18 @@ def _fallback_query_response(query: str, *, reason: str = "unavailable") -> Dict
         body = (
             "That request took too long to complete. The service may be under load or still "
             "loading models. Try again in a moment. Official information: https://www.hdfcfund.com/"
+        )
+    elif reason == "no_orchestrator":
+        body = (
+            "The RAG engine is not attached (initialization may still be running, timed out, or failed). "
+            "Check Railway logs for RAG_INIT_TIMEOUT / STARTUP_CHROMA_PROBE / Chroma errors. "
+            "Official information: https://www.hdfcfund.com/"
+        )
+    elif reason == "query_failed":
+        body = (
+            "The retrieval pipeline hit an error while processing your question (the index may be fine — "
+            "see server logs for answer_query traceback). Try rephrasing or retry. "
+            "Official information: https://www.hdfcfund.com/"
         )
     else:
         body = (
@@ -453,8 +513,8 @@ async def ensure_rag_engine_async(request: Request) -> None:
 
 def _run_query_sync(query: str) -> Dict[str, Any]:
     if rag_orchestrator is None:
-        logger.warning("_run_query_sync: no orchestrator — returning fallback")
-        return _fallback_query_response(query, reason="unavailable")
+        logger.warning("_run_query_sync: no orchestrator — returning fallback (reason=no_orchestrator)")
+        return _fallback_query_response(query, reason="no_orchestrator")
     try:
         logger.info(
             "Running answer_query — schemes=%s indexed=%s query_len=%s",
@@ -470,7 +530,7 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
             Path(_processed_dir()) / "chunked_data_phase1.4.json",
             type(e).__name__,
         )
-        return _fallback_query_response(query, reason="unavailable")
+        return _fallback_query_response(query, reason="query_failed")
 
     global _model_loaded, _retrieval_warmed
     _retrieval_warmed = True
@@ -569,6 +629,10 @@ async def lifespan(app: FastAPI):
     )
     _log_index_diagnostics()
     try:
+        await asyncio.to_thread(_sync_chroma_sqlite_probe)
+    except Exception:
+        logger.exception("STARTUP_CHROMA_PROBE thread wrapper failed")
+    try:
         _schemes = _load_schemes_only()
     except Exception:
         logger.exception("Scheme load failed; continuing with empty schemes")
@@ -614,7 +678,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.7",
+    version="2.2.8",
     lifespan=lifespan,
 )
 
@@ -686,7 +750,7 @@ async def query_fund(request: Request, body: QueryRequest):
         return QueryResponse(answer=fb["answer"], status="timeout")
     except Exception:
         logger.exception("Query failed")
-        fb = _fallback_query_response(q, reason="unavailable")
+        fb = _fallback_query_response(q, reason="query_failed")
         return QueryResponse(answer=fb["answer"], status="error")
 
 

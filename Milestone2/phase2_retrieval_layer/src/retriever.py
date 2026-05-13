@@ -53,6 +53,16 @@ class HybridRetriever:
         logger.info("Initializing ChromaDB client (on-disk, lazy query execution)")
         self.client = chromadb.PersistentClient(path=persist_directory)
         self.collection = self.client.get_collection(name=collection_name)
+        try:
+            _n = self.collection.count()
+            logger.info(
+                'Chroma collection opened — name="%s" document_count=%s path=%s',
+                collection_name,
+                _n,
+                persist_directory,
+            )
+        except Exception as e:
+            logger.warning("Chroma collection opened but count() failed: %s", e)
 
         if use_reranker:
             from sentence_transformers import CrossEncoder
@@ -76,13 +86,18 @@ class HybridRetriever:
             from sentence_transformers import SentenceTransformer
             self.embedding_model = SentenceTransformer(self.embedding_model_name)
             after = get_memory_usage()
-            logger.info("Embedding model ready (after ~%.1f MB)", after or -1)
+            logger.info(
+                "Embedding model initialized: %s (after ~%.1f MB)",
+                self.embedding_model_name,
+                after or -1,
+            )
             gc.collect()
         return self.embedding_model
 
     def warm_vector_pipeline(self, probe_query: str = "HDFC mutual fund overview") -> None:
         """Load MiniLM and run one minimal Chroma query (same thread as caller; for /health readiness)."""
         _ = self.search(probe_query, n_results=1, filters=None)
+        logger.info("Embedding test successful (probe query: encode + Chroma query completed).")
 
     def _initialize_bm25(self):
         """Load full document texts for BM25 — memory-heavy; only when use_bm25=True."""
