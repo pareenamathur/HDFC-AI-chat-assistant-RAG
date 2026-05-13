@@ -28,14 +28,14 @@ export type HealthResponse = {
   message?: string;
   ready?: boolean;
   rag_available?: boolean;
+  /** True after first successful embedding-backed query (not only Chroma open). */
+  rag_ready?: boolean;
   schemes_loaded?: number;
   memory_mb?: number | null;
   model_loaded?: boolean;
   chroma_loaded?: boolean;
   mock_mode?: boolean;
   degraded?: boolean;
-  /** Same as rag_available (legacy). */
-  rag_ready?: boolean;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {

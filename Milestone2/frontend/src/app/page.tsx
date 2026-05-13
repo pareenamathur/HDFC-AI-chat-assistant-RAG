@@ -69,10 +69,11 @@ function ApiStatusPill({
     );
   }
   if (health.rag_available) {
+    const warm = health.rag_ready ? '' : ' · embeddings warming';
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-950/40 px-3 py-1 text-xs font-medium text-teal-200">
         <Wifi className="h-3.5 w-3.5" />
-        {health.mock_mode ? 'RAG online · demo LLM' : 'RAG online'}
+        {health.mock_mode ? `RAG online · demo LLM${warm}` : `RAG online${warm}`}
       </span>
     );
   }

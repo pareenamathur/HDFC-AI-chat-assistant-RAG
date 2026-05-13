@@ -29,9 +29,10 @@ wheels/
 # data/html/
 # data/documents/
 # data/processed/
-# Chroma DB files (large); keep README so clone has folder + instructions
-data/indexed/*
-!data/indexed/README.md
+# Chroma: commit persistence files for Railway (chroma.sqlite3 + segment dirs).
+# Ignore only local noise:
+data/indexed/.DS_Store
+data/indexed/**/*.tmp
 
 # Logs
 *.log

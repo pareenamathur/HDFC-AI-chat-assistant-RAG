@@ -23,7 +23,7 @@ os.environ.setdefault("CHROMA_TELEMETRY", "false")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 try:
     from dotenv import load_dotenv
@@ -139,11 +139,15 @@ class SchemesResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """`ready` is always true once the process serves traffic (never tied to RAG)."""
+    """`ready` = HTTP API live. `rag_available` = Chroma+RAGOrchestrator up. `rag_ready` = first retrieval done."""
 
     status: str = Field(default="healthy")
     ready: bool = Field(default=True)
     rag_available: bool = Field(default=False)
+    rag_ready: bool = Field(
+        default=False,
+        description="True after first successful embedding-backed query (not just Chroma open).",
+    )
     message: str = Field(default="")
     schemes_loaded: int = Field(default=0)
     memory_mb: Optional[float] = None
@@ -151,12 +155,6 @@ class HealthResponse(BaseModel):
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
     degraded: bool = Field(default=False)
-
-    @computed_field
-    @property
-    def rag_ready(self) -> bool:
-        """Alias for `rag_available` (legacy clients)."""
-        return self.rag_available
 
 
 def _load_schemes_only() -> List[str]:
@@ -265,8 +263,9 @@ def _sync_init_rag_body() -> None:
         _chroma_loaded = True
         gc.collect()
         after = _memory_mb()
+        logger.info("Chroma index loaded successfully — collection mf_faq_corpus is reachable.")
         logger.info(
-            "Chroma + orchestrator OK — RAM ~%.1f MB | embedding loads on first query",
+            "RAG initialized successfully — orchestrator attached (RAM ~%.1f MB; embeddings load on first query).",
             after or -1,
         )
     except Exception as e:
@@ -274,7 +273,8 @@ def _sync_init_rag_body() -> None:
         _rag_init_error = err
         _degraded_no_rag = True
         logger.warning(
-            "RAG / Chroma init FAILED — fallback mode. Error type=%s msg=%s",
+            "Index missing or invalid — RAG / Chroma init FAILED (rebuild: python scripts/rebuild_chroma_from_chunks.py --force). "
+            "Error type=%s msg=%s",
             type(e).__name__,
             err[:500],
             exc_info=True,
@@ -299,7 +299,8 @@ async def ensure_rag_engine_async(request: Request) -> None:
         return
 
     lock = request.app.state.rag_lock
-    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 20.0), 120.0))
+    # First init downloads MiniLM + opens Chroma — default 120s for cold Railway
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
 
     async with lock:
         if rag_orchestrator is not None:
@@ -369,6 +370,7 @@ def _build_health_response() -> HealthResponse:
         status="healthy",
         ready=True,
         rag_available=rag_available,
+        rag_ready=_model_loaded,
         message=msg,
         schemes_loaded=len(_schemes),
         memory_mb=_memory_mb(),
@@ -388,6 +390,7 @@ def _health_safe() -> HealthResponse:
             status="healthy",
             ready=True,
             rag_available=False,
+            rag_ready=False,
             message="Health readout failed internally; process is up.",
             schemes_loaded=0,
             memory_mb=None,
@@ -418,7 +421,8 @@ async def lifespan(app: FastAPI):
 
     mem = _memory_mb()
     logger.info(
-        "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB",
+        "Startup complete — routes live, RAG deferred | schemes=%s RAM=%.1f MB | "
+        "mock_mode in /health means missing GROQ_API_KEY only (not Chroma).",
         len(_schemes),
         mem or -1,
     )
