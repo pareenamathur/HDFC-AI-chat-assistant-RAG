@@ -1,6 +1,7 @@
 """
-Alternate FastAPI entry (phase3 package). Production uses `backend/app.py`.
-Lazy-loads RAG on first request to keep Railway RAM low at boot.
+Alternate FastAPI entry (phase3 package). Production on Railway should use:
+  uvicorn backend.app:app
+This module mirrors backend health semantics so misconfigured deploys still report correctly.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -50,13 +51,30 @@ _scheme_names: List[str] = []
 _init_error: Optional[str] = None
 
 
+def _has_groq() -> bool:
+    return bool((os.getenv("GROQ_API_KEY") or "").strip())
+
+
+def _memory_mb() -> Optional[float]:
+    try:
+        import psutil
+
+        return psutil.Process().memory_info().rss / 1024 / 1024
+    except Exception:
+        return None
+
+
 def _load_schemes() -> List[str]:
     path = os.path.join(BASE, "data", "processed", "chunked_data_phase1.4.json")
     if not os.path.exists(path):
         return []
-    with open(path, encoding="utf-8") as f:
-        chunks = json.load(f)
-    return sorted({c["scheme_name"] for c in chunks})
+    try:
+        with open(path, encoding="utf-8") as f:
+            chunks = json.load(f)
+        return sorted({c["scheme_name"] for c in chunks})
+    except Exception:
+        logger.exception("Failed loading schemes")
+        return []
 
 
 def _ensure_orchestrator() -> bool:
@@ -71,7 +89,7 @@ def _ensure_orchestrator() -> bool:
         persist = os.path.join(BASE, "data", "indexed")
         bm25 = os.getenv("USE_BM25", "").lower() in ("1", "true", "yes")
         rerank = os.getenv("USE_RERANKER", "").lower() in ("1", "true", "yes")
-        vk = int(os.getenv("VECTOR_FETCH_K", "10"))
+        vk = int(os.getenv("VECTOR_FETCH_K", "10") or "10")
         _orchestrator = RAGOrchestrator(
             persist_directory=persist,
             scheme_names=_scheme_names,
@@ -87,20 +105,60 @@ def _ensure_orchestrator() -> bool:
         return False
 
 
+def _health_dict() -> Dict[str, Any]:
+    """Match backend.app HealthResponse shape; never raises."""
+    rag_available = _orchestrator is not None
+    degraded = not rag_available and bool(_init_error)
+    try:
+        return {
+            "status": "healthy",
+            "ready": True,
+            "rag_available": rag_available,
+            # Back-compat: same meaning as rag_available (old clients)
+            "rag_ready": rag_available,
+            "message": (
+                "Phase3 API — prefer `uvicorn backend.app:app` for production"
+                if not rag_available
+                else "Phase3 API — RAG loaded"
+            ),
+            "schemes_loaded": len(_scheme_names),
+            "memory_mb": _memory_mb(),
+            "model_loaded": False,
+            "chroma_loaded": rag_available,
+            "mock_mode": not _has_groq(),
+            "degraded": degraded,
+            "error": _init_error,
+        }
+    except Exception:
+        return {
+            "status": "healthy",
+            "ready": True,
+            "rag_available": False,
+            "rag_ready": False,
+            "message": "API up",
+            "schemes_loaded": 0,
+            "mock_mode": True,
+            "degraded": True,
+        }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _scheme_names
-    _scheme_names = _load_schemes()
+    try:
+        _scheme_names = _load_schemes()
+    except Exception:
+        _scheme_names = []
     logger.info("Phase3 API startup — %s schemes (RAG deferred)", len(_scheme_names))
     yield
     logger.info("Phase3 API shutdown")
 
 
 def _cors() -> list:
-    raw = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
+    raw = (os.getenv("CORS_ALLOW_ORIGINS") or "*").strip()
     if raw == "*":
         return ["*"]
-    return [x.strip() for x in raw.split(",") if x.strip()]
+    return [x.strip() for x in raw.split(",") if x.strip()] or ["*"]
 
 
 app = FastAPI(title="Mutual Fund FAQ Assistant API", lifespan=lifespan)
@@ -121,30 +179,39 @@ async def passthrough(request: Request, call_next):
 
 @app.get("/")
 async def root():
-    return {"message": "Mutual Fund FAQ Assistant API", "rag_ready": _orchestrator is not None}
+    return _health_dict()
 
 
 @app.get("/health")
 async def health():
-    return {
-        "status": "healthy",
-        "ready": _orchestrator is not None,
-        "schemes_loaded": len(_scheme_names),
-        "error": _init_error,
-    }
+    try:
+        return _health_dict()
+    except Exception:
+        return {"status": "healthy", "ready": True, "rag_available": False, "rag_ready": False}
 
 
 @app.get("/schemes")
 async def get_schemes():
-    return {"schemes": _scheme_names}
+    try:
+        return {"schemes": _scheme_names}
+    except Exception:
+        return {"schemes": []}
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     if not _ensure_orchestrator():
-        raise HTTPException(status_code=503, detail=_init_error or "Service unavailable")
+        return ChatResponse(
+            answer=(
+                "The assistant could not load the fund corpus on this instance. "
+                "Use the main API (`backend.app:app`) or verify `data/indexed/`. "
+                f"Detail: {_init_error or 'unknown'}"
+            ),
+            status="degraded",
+        )
 
-    timeout = float(os.getenv("QUERY_TIMEOUT_SECONDS", "90"))
+    timeout = float(os.getenv("QUERY_TIMEOUT_SECONDS", "90") or "90")
+    timeout = max(5.0, min(timeout, 300.0))
     try:
         async with asyncio.timeout(timeout):
             raw = await asyncio.to_thread(_orchestrator.answer_query, request.query)
@@ -159,7 +226,10 @@ async def chat(request: ChatRequest):
         return ChatResponse(answer="Request timed out.", status="timeout")
     except Exception as e:
         logger.exception("chat error")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        return ChatResponse(
+            answer="Something went wrong. Please try again.",
+            status="error",
+        )
 
 
 if __name__ == "__main__":
