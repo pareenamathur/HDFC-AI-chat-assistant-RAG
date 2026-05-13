@@ -1,0 +1,28 @@
+# HDFC MF Assistant — FastAPI only (for Railway / Fly.io / Render / Cloud Run).
+# Build from repo folder that contains Milestone2 as context root = Milestone2/
+#
+#   docker build -f Dockerfile.api -t hdfc-mf-api .
+#   docker run --rm -p 8000:8000 -e GROQ_API_KEY=... hdfc-mf-api
+#
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-api.txt requirements.txt ./
+RUN pip install --upgrade pip && pip install -r requirements-api.txt
+
+COPY . .
+
+EXPOSE 8000
+ENV PORT=8000
+
+# Bind immediately; orchestrator loads lazily on first /query (same as local).
+CMD ["sh", "-c", "exec uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

@@ -1,0 +1,8 @@
+# FastAPI service on top of the same RAG stack as Streamlit (for Vercel frontend).
+# Install from Milestone2/: pip install -r requirements-api.txt
+#
+-r requirements.txt
+
+fastapi>=0.104.0,<1
+uvicorn[standard]>=0.24.0,<1
+python-multipart>=0.0.6
