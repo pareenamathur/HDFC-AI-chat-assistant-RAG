@@ -37,6 +37,10 @@ class RAGOrchestrator:
         self.builder = ContextBuilder()
         self._generator = None
 
+    def warm_retrieval_stack(self, probe_query: str = "HDFC mutual fund overview") -> None:
+        """Embedding model + one vector search — no LLM call."""
+        self.retriever.warm_vector_pipeline(probe_query)
+
     def _get_generator(self):
         """Lazy LLM + AnswerGenerator so startup stays lightweight."""
         if self._generator is None:

@@ -146,6 +146,7 @@ rag_orchestrator: Any = None
 _schemes: List[str] = []
 _chroma_loaded: bool = False
 _model_loaded: bool = False
+_retrieval_warmed: bool = False
 _rag_init_attempted: bool = False
 _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
@@ -170,19 +171,22 @@ class SchemesResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """ready=API up; rag_available=orchestrator up; rag_ready=first successful /query answer path."""
+    """ready=API up; rag_available=orchestrator up; rag_ready=retrieval+embeddings warmed."""
 
     status: str = Field(default="healthy")
     ready: bool = Field(default=True)
     rag_available: bool = Field(default=False)
     rag_ready: bool = Field(
         default=False,
-        description="True after first successful POST /query (embedding + answer path completed).",
+        description="True after embedding model loaded and one vector search succeeded (or full /query).",
     )
     message: str = Field(default="")
     schemes_loaded: int = Field(default=0)
     memory_mb: Optional[float] = None
-    model_loaded: bool = Field(default=False)
+    model_loaded: bool = Field(
+        default=False,
+        description="True after first successful answer_query (includes LLM / generator path).",
+    )
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
     degraded: bool = Field(default=False)
@@ -255,7 +259,7 @@ def _vector_fetch_k() -> int:
 
 def _sync_init_rag_body() -> None:
     """Heavy RAG init (Chroma client, collection). Runs in worker thread; no asyncio here."""
-    global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out
+    global rag_orchestrator, _chroma_loaded, _rag_init_error, _degraded_no_rag, _rag_init_timed_out, _retrieval_warmed
 
     if rag_orchestrator is not None:
         logger.info("RAG init skipped — orchestrator already present.")
@@ -304,9 +308,27 @@ def _sync_init_rag_body() -> None:
         after = _memory_mb()
         logger.info("Chroma index loaded successfully — collection mf_faq_corpus is reachable.")
         logger.info(
-            "RAG initialized successfully — orchestrator attached (RAM ~%.1f MB; embeddings load on first query).",
+            "RAG initialized successfully — orchestrator attached (RAM ~%.1f MB).",
             after or -1,
         )
+
+        if _bool_env("RAG_EMBEDDING_WARM", True):
+            try:
+                orch.warm_retrieval_stack()
+                _retrieval_warmed = True
+                mem2 = _memory_mb()
+                logger.info(
+                    "Embedding + retrieval warm complete — rag_ready on /health (RAM ~%.1f MB).",
+                    mem2 or -1,
+                )
+            except Exception as e_w:
+                logger.warning(
+                    "Embedding warm failed (orchestrator still usable on first /query): type=%s msg=%s",
+                    type(e_w).__name__,
+                    str(e_w)[:400],
+                    exc_info=True,
+                )
+        gc.collect()
     except Exception as e:
         err = str(e)
         _rag_init_error = err
@@ -386,9 +408,10 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
         logger.exception("answer_query failed: %s", e)
         return _fallback_query_response(query, reason="unavailable")
 
-    global _model_loaded
+    global _model_loaded, _retrieval_warmed
     _model_loaded = True
-    logger.info("Query path OK — embedding/LLM stack exercised; rag_ready will reflect on /health")
+    _retrieval_warmed = True
+    logger.info("Query path OK — embedding/LLM stack exercised; /health model_loaded + rag_ready")
     gc.collect()
     return out
 
@@ -428,7 +451,7 @@ def _build_health_response() -> HealthResponse:
         status="healthy",
         ready=True,
         rag_available=rag_available,
-        rag_ready=_model_loaded,
+        rag_ready=_retrieval_warmed,
         message=msg,
         schemes_loaded=len(_schemes),
         memory_mb=_memory_mb(),
@@ -525,7 +548,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.3",
+    version="2.2.4",
     lifespan=lifespan,
 )
 

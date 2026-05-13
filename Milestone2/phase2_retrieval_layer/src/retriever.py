@@ -80,6 +80,10 @@ class HybridRetriever:
             gc.collect()
         return self.embedding_model
 
+    def warm_vector_pipeline(self, probe_query: str = "HDFC mutual fund overview") -> None:
+        """Load MiniLM and run one minimal Chroma query (same thread as caller; for /health readiness)."""
+        _ = self.search(probe_query, n_results=1, filters=None)
+
     def _initialize_bm25(self):
         """Load full document texts for BM25 — memory-heavy; only when use_bm25=True."""
         from rank_bm25 import BM25Okapi
