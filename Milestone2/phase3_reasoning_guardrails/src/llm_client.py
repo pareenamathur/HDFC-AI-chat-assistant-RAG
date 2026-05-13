@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 import logging
 from dotenv import load_dotenv
 
@@ -33,27 +33,40 @@ class MockLLM(LLMProvider):
         return "I am sorry, but I do not have enough information in the provided context."
 
 class GroqProvider(LLMProvider):
-    """Groq implementation."""
+    """Groq implementation with bounded LLM wall time (no infinite hangs)."""
+
+    _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="groq")
+
     def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant"):
         from groq import Groq
         self.client = Groq(api_key=api_key)
         self.model = model
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def _create(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=0
+            temperature=0,
         )
         return response.choices[0].message.content
 
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        timeout_s = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+        fut = self._pool.submit(self._create, system_prompt, user_prompt)
+        try:
+            return fut.result(timeout=timeout_s)
+        except FuturesTimeout:
+            logger.error("Groq call exceeded LLM_TIMEOUT_SECONDS=%s", timeout_s)
+            return (
+                "The answer service timed out. Please try again with a shorter question."
+            )
+
 def get_llm_provider() -> LLMProvider:
     """
-    Resolve LLM backend: Groq (Streamlit Cloud) or MockLLM when no key is set.
-    Configure `GROQ_API_KEY` in Streamlit Secrets for production-quality answers.
+    Groq when GROQ_API_KEY is set; otherwise MockLLM (safe for boot without secrets).
     """
     groq_api_key = os.getenv("GROQ_API_KEY")
 
@@ -61,7 +74,6 @@ def get_llm_provider() -> LLMProvider:
         logger.info("Using GroqProvider.")
         return GroqProvider(groq_api_key)
     logger.warning(
-        "No GROQ_API_KEY — using MockLLM. "
-        "Add GROQ_API_KEY in Streamlit Cloud Secrets for live LLM answers."
+        "No GROQ_API_KEY — using MockLLM. Set GROQ_API_KEY on Railway for live answers."
     )
     return MockLLM()

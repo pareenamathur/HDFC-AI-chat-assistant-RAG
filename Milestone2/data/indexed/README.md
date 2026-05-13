@@ -1,6 +1,6 @@
 # Chroma vector index (required at runtime)
 
-Streamlit Cloud needs a persisted Chroma database **here** (`data/indexed/`), typically:
+Railway / Docker expect a persisted Chroma database **here** (`data/indexed/`), typically:
 
 - `chroma.sqlite3`
 - UUID subfolder(s) with segment data
@@ -11,4 +11,4 @@ Streamlit Cloud needs a persisted Chroma database **here** (`data/indexed/`), ty
 2. Copy a prepared `data/indexed/` directory into the project before deploy, **or**
 3. Remove `data/indexed/*` from `.gitignore` temporarily and commit the index (large repo).
 
-The app opens `PersistDirectory=…/data/indexed` and expects collection **`mf_faq_corpus`**.
+The API opens `PersistDirectory=…/data/indexed` and expects collection **`mf_faq_corpus`**.

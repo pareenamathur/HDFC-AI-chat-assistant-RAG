@@ -1,65 +1,66 @@
 """
-Streamlit Backend API for HDFC Mutual Fund Assistant
-Provides REST API endpoints for RAG system
+HDFC Mutual Fund Assistant — FastAPI production API (Railway / Docker).
+No Streamlit. Heavy models load lazily on first query only.
 """
 
-import os
-import sys
+from __future__ import annotations
+
+import asyncio
+import gc
 import json
 import logging
-from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException
+import os
+import sys
+from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+
+# Must run before importing chromadb / grpc stacks (protobuf compatibility + thread caps).
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("CHROMA_TELEMETRY", "false")
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Add Phase 2 and Phase 3 src to path (lazy import)
-# Fix: Correct BASE path calculation - backend is inside Milestone2
-# backend/app.py -> backend -> Milestone2
+# backend/app.py -> Milestone2/
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(BASE, 'phase2_retrieval_layer', 'src'))
-sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
+sys.path.insert(0, os.path.join(BASE, "phase2_retrieval_layer", "src"))
+sys.path.insert(0, os.path.join(BASE, "phase3_reasoning_guardrails", "src"))
 
-# Lazy import orchestrator to reduce startup memory
-orchestrator = None
-
-def get_orchestrator():
-    """Get orchestrator instance (lazy import)."""
-    global orchestrator
-    if orchestrator is None:
-        logger.info("Lazy importing RAGOrchestrator...")
-        from orchestrator import RAGOrchestrator
-        orchestrator = RAGOrchestrator
-        logger.info("RAGOrchestrator imported successfully")
-    return orchestrator
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="HDFC Mutual Fund API",
-    description="Backend API for HDFC Mutual Fund Assistant",
-    version="1.0.0"
-)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Vercel domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def _memory_mb() -> Optional[float]:
+    try:
+        import psutil
 
-# Global variables for cached components
-orchestrator = None
-schemes = []
+        return psutil.Process().memory_info().rss / 1024 / 1024
+    except Exception:
+        return None
 
-# Pydantic models for request/response
+
+def _truthy_env(name: str, default: bool = False) -> bool:
+    v = os.getenv(name, "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "on")
+
+
+def _cors_origins() -> List[str]:
+    raw = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
+    if raw == "*":
+        return ["*"]
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
 class QueryRequest(BaseModel):
     query: str
     chat_history: List[Dict[str, str]] = []
+
 
 class QueryResponse(BaseModel):
     answer: str
@@ -68,235 +69,228 @@ class QueryResponse(BaseModel):
     last_updated: Optional[str] = None
     status: str
 
+
 class SchemesResponse(BaseModel):
     schemes: List[str]
+
 
 class HealthResponse(BaseModel):
     status: str
     message: str
+    ready: bool = False
+    schemes_loaded: int = 0
+    memory_mb: Optional[float] = None
 
-# Global variables for lazy loading
-orchestrator = None
-schemes = []
-_orchestrator_initialized = False
 
-def lazy_initialize_orchestrator():
-    """Lazy-load ChromaDB and embeddings only when first query happens."""
-    global orchestrator, _orchestrator_initialized, schemes
-    
-    if _orchestrator_initialized:
-        logger.info("Orchestrator already initialized, skipping...")
-        return True
-    
-    logger.info("Starting lazy initialization of orchestrator...")
-    logger.info("Heavy imports status: LOADING (importing RAG components)")
-    
-    # Log memory before heavy loading
-    before_heavy_memory = get_memory_usage()
-    logger.info(f"Memory before heavy loading: {before_heavy_memory} MB")
-    
+# --- Lazy singleton RAG (instance + failure reason) ---
+rag_orchestrator: Any = None
+_schemes: List[str] = []
+_rag_ready: bool = False
+_rag_init_error: Optional[str] = None
+
+
+def _load_schemes_only() -> List[str]:
+    processed = os.getenv(
+        "PROCESSED_DATA_PATH", os.path.join(BASE, "data", "processed")
+    )
+    chunked_data_path = os.path.join(processed, "chunked_data_phase1.4.json")
+    if not os.path.exists(chunked_data_path):
+        logger.warning("Chunked data missing at %s — schemes list empty.", chunked_data_path)
+        return []
     try:
-        # Use environment variables for paths with deployment-safe defaults
-        data_path = os.getenv('DATA_PATH', os.path.join(BASE, 'data'))
-        processed_data_path = os.getenv('PROCESSED_DATA_PATH', os.path.join(BASE, 'data', 'processed'))
-        indexed_data_path = os.getenv('INDEXED_DATA_PATH', os.path.join(BASE, 'data', 'indexed'))
-        
-        # Load schemes from chunked data
-        chunked_data_path = os.path.join(processed_data_path, 'chunked_data_phase1.4.json')
-        if os.path.exists(chunked_data_path):
-            with open(chunked_data_path, 'r', encoding='utf-8') as f:
-                chunks = json.load(f)
-            schemes = sorted(list(set(c['scheme_name'] for c in chunks)))
-            logger.info(f"Loaded {len(schemes)} schemes")
-        else:
-            logger.warning(f"Chunked data file not found at: {chunked_data_path}")
-            schemes = []
-        
-        # Initialize orchestrator with maximum memory optimization for Render free tier
-        persist_dir = indexed_data_path
-        
-        # Force disable memory-intensive features for Render free tier
-        use_bm25 = False  # Always disabled for free tier
-        use_reranker = False  # Always disabled for free tier
-        
-        logger.info(f"Initializing orchestrator with BM25: {use_bm25}, Reranker: {use_reranker}")
-        logger.info(f"Using persist directory: {persist_dir}")
-        logger.info("Using memory-optimized configuration for Render free tier")
-        
-        # Log ChromaDB initialization start
-        logger.info("ChromaDB initialization status: STARTING")
-        
-        # Initialize with minimal memory footprint
-        RAGOrchestrator_class = get_orchestrator()
-        orchestrator = RAGOrchestrator_class(
-            persist_directory=persist_dir,
-            scheme_names=schemes,
+        with open(chunked_data_path, "r", encoding="utf-8") as f:
+            chunks = json.load(f)
+        schemes = sorted({c["scheme_name"] for c in chunks})
+        logger.info("Loaded %s scheme names (startup)", len(schemes))
+        return schemes
+    except Exception as e:
+        logger.exception("Failed loading schemes: %s", e)
+        return []
+
+
+def ensure_rag_orchestrator() -> bool:
+    """Lazy-init MiniLM + Chroma + orchestrator on first query; singleton thereafter."""
+    global rag_orchestrator, _rag_ready, _rag_init_error
+
+    if _rag_ready and rag_orchestrator is not None:
+        return True
+    if _rag_init_error:
+        return False
+
+    try:
+        before = _memory_mb()
+        logger.info("Lazy-loading RAG orchestrator (before ~%.1f MB)", before or -1)
+
+        from orchestrator import RAGOrchestrator
+
+        indexed_data_path = os.getenv(
+            "INDEXED_DATA_PATH", os.path.join(BASE, "data", "indexed")
+        )
+        use_bm25 = _truthy_env("USE_BM25", False)
+        use_reranker = _truthy_env("USE_RERANKER", False)
+        vk_raw = os.getenv("VECTOR_FETCH_K") or os.getenv("STREAMLIT_VECTOR_FETCH_K") or "10"
+        vector_fetch_k = max(4, min(int(vk_raw), 24))
+
+        rag_orchestrator = RAGOrchestrator(
+            persist_directory=indexed_data_path,
+            scheme_names=_schemes,
             use_bm25=use_bm25,
             use_reranker=use_reranker,
-            vector_fetch_k=int(os.getenv("STREAMLIT_VECTOR_FETCH_K", "12")),
+            vector_fetch_k=vector_fetch_k,
         )
-        
-        # Log ChromaDB initialization complete
-        logger.info("ChromaDB initialization status: COMPLETED")
-        
-        # Log embedding model loading
-        logger.info("Embedding model status: LOADED (default lightweight model)")
-        logger.info("Model loading status: COMPLETED (RAG system ready)")
-        
-        # Log memory after heavy loading
-        after_heavy_memory = get_memory_usage()
-        logger.info(f"Memory after heavy loading: {after_heavy_memory} MB")
-        
-        _orchestrator_initialized = True
-        logger.info("Backend initialized successfully (lazy-loaded)")
+        _rag_ready = True
+        gc.collect()
+        after = _memory_mb()
+        logger.info("RAG orchestrator ready (after ~%.1f MB)", after or -1)
         return True
     except Exception as e:
-        logger.error(f"Error initializing backend: {str(e)}")
+        _rag_init_error = str(e)
+        logger.exception("RAG initialization failed: %s", e)
         return False
 
-def get_memory_usage():
-    """Get current memory usage in MB."""
-    try:
-        import psutil
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        return memory_info.rss / 1024 / 1024  # Convert to MB
-    except ImportError:
-        return "Unknown (psutil not available)"
 
-def initialize_backend():
-    """Initialize backend components with minimal startup memory usage for Railway."""
-    global schemes
-    
-    # Log startup memory usage
-    startup_memory = get_memory_usage()
-    logger.info(f"Backend startup: Current RAM usage: {startup_memory} MB")
-    logger.info("Backend startup: Loading schemes only (lazy-loading orchestrator)")
-    
-    try:
-        # Use environment variables for paths with deployment-safe defaults
-        data_path = os.getenv('DATA_PATH', os.path.join(BASE, 'data'))
-        processed_data_path = os.getenv('PROCESSED_DATA_PATH', os.path.join(BASE, 'data', 'processed'))
-        
-        # Load schemes from chunked data (minimal memory usage)
-        chunked_data_path = os.path.join(processed_data_path, 'chunked_data_phase1.4.json')
-        if os.path.exists(chunked_data_path):
-            with open(chunked_data_path, 'r', encoding='utf-8') as f:
-                chunks = json.load(f)
-            schemes = sorted(list(set(c['scheme_name'] for c in chunks)))
-            logger.info(f"Loaded {len(schemes)} schemes")
-        else:
-            logger.warning(f"Chunked data file not found at: {chunked_data_path}")
-            schemes = []
-        
-        # Log model loading status (all models deferred)
-        logger.info("Model loading status: DEFERRED (will load on first query)")
-        logger.info("ChromaDB initialization status: DEFERRED (will initialize on first query)")
-        logger.info("Embedding model status: DEFERRED (will load on first query)")
-        logger.info("Heavy imports status: DEFERRED (will import on first query)")
-        logger.info("sentence-transformers: DEFERRED (will load on first query)")
-        logger.info("transformers: DEFERRED (will load on first query)")
-        
-        # Log memory after schemes loading
-        after_schemes_memory = get_memory_usage()
-        logger.info(f"Memory after loading schemes: {after_schemes_memory} MB")
-        
-        # Ensure startup memory is under 300MB for Railway free tier
-        if isinstance(after_schemes_memory, (int, float)):
-            if after_schemes_memory > 300:
-                logger.warning(f"Startup memory {after_schemes_memory}MB exceeds Railway free tier limit of 300MB")
-            else:
-                logger.info(f"Startup memory {after_schemes_memory}MB is within Railway free tier limit")
-        
-        # Do NOT initialize orchestrator at startup - lazy load on first query
-        logger.info("Orchestrator will be lazy-loaded on first query to minimize startup RAM")
-        logger.info("Backend startup complete (minimal memory usage)")
-        return True
-    except Exception as e:
-        logger.error(f"Error initializing backend: {str(e)}")
-        return False
+def _run_query_sync(query: str) -> Dict[str, Any]:
+    assert rag_orchestrator is not None
+    out = rag_orchestrator.answer_query(query)
+    gc.collect()
+    return out
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize backend on startup."""
-    success = initialize_backend()
-    if not success:
-        logger.error("Failed to initialize backend")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _schemes
+    logger.info(
+        "HDFC MF API boot — BASE=%s RAM=%.1f MB",
+        BASE,
+        _memory_mb() or -1,
+    )
+    _schemes = _load_schemes_only()
+    mem = _memory_mb()
+    logger.info(
+        "Startup complete — schemes=%s RAM=%.1f MB (models deferred)",
+        len(_schemes),
+        mem or -1,
+    )
+    yield
+    logger.info("HDFC MF API shutdown")
+
+
+app = FastAPI(
+    title="HDFC Mutual Fund API",
+    description="Production RAG API",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled error for %s", request.url.path)
+        raise
+
 
 @app.get("/", response_model=HealthResponse)
 async def root():
-    """Health check endpoint."""
     return HealthResponse(
-        status="healthy" if orchestrator else "unhealthy",
-        message="HDFC Mutual Fund API is running"
+        status="healthy",
+        message="HDFC Mutual Fund API",
+        ready=_rag_ready,
+        schemes_loaded=len(_schemes),
+        memory_mb=_memory_mb(),
     )
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Detailed health check endpoint."""
-    return HealthResponse(
-        status="healthy" if orchestrator else "unhealthy",
-        message=f"Backend initialized: {orchestrator is not None}, Schemes loaded: {len(schemes)}"
+    """Always returns if process is up; `ready` indicates RAG warmed."""
+    msg = (
+        "RAG loaded and ready"
+        if _rag_ready
+        else (
+            "API online — RAG cold (loads on first query)"
+            if not _rag_init_error
+            else f"API online — RAG failed: {_rag_init_error}"
+        )
     )
+    return HealthResponse(
+        status="healthy",
+        message=msg,
+        ready=_rag_ready,
+        schemes_loaded=len(_schemes),
+        memory_mb=_memory_mb(),
+    )
+
 
 @app.get("/schemes", response_model=SchemesResponse)
 async def get_schemes():
-    """Get list of available mutual fund schemes."""
-    if not schemes:
-        raise HTTPException(status_code=503, detail="Schemes not loaded")
-    
-    return SchemesResponse(schemes=schemes)
+    return SchemesResponse(schemes=_schemes)
+
 
 @app.post("/query", response_model=QueryResponse)
 async def query_fund(request: QueryRequest):
-    """Query RAG system for mutual fund information."""
-    # Lazy-load orchestrator on first query to minimize startup RAM
-    if not lazy_initialize_orchestrator():
-        raise HTTPException(status_code=503, detail="Failed to initialize backend")
-    
-    try:
-        logger.info(f"Processing query: {request.query[:100]}...")
-        # Process query through orchestrator
-        response = orchestrator.answer_query(request.query)
-        
+    q = (request.query or "").strip()
+    if not q:
         return QueryResponse(
-            answer=response.get('answer', 'Sorry, I could not process your query.'),
-            source=response.get('source'),
-            source_link=response.get('source_link'),
-            last_updated=response.get('last_updated'),
-            status=response.get('status', 'error')
+            answer="Please enter a question.",
+            status="error",
+        )
+
+    if not ensure_rag_orchestrator():
+        detail = _rag_init_error or "Unable to initialize retrieval engine."
+        raise HTTPException(status_code=503, detail=detail)
+
+    timeout_s = float(os.getenv("QUERY_TIMEOUT_SECONDS", "90"))
+    try:
+        async with asyncio.timeout(timeout_s):
+            response = await asyncio.to_thread(_run_query_sync, q)
+        return QueryResponse(
+            answer=response.get("answer", "") or "No answer returned.",
+            source=response.get("source"),
+            source_link=response.get("source_link"),
+            last_updated=response.get("last_updated"),
+            status=response.get("status", "error"),
+        )
+    except TimeoutError:
+        logger.warning("Query timed out after %ss", timeout_s)
+        return QueryResponse(
+            answer="The request took too long. Try a shorter question or retry.",
+            status="timeout",
         )
     except Exception as e:
-        logger.error(f"Error processing query: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+        logger.exception("Query failed")
+        return QueryResponse(
+            answer="Something went wrong processing your question. Please try again.",
+            status="error",
+        )
+
 
 @app.post("/chat", response_model=QueryResponse)
 async def chat_with_history(request: QueryRequest):
-    """Chat with conversation history support."""
-    # Lazy-load orchestrator on first query to minimize startup RAM
-    if not lazy_initialize_orchestrator():
-        raise HTTPException(status_code=503, detail="Failed to initialize backend")
-    
-    try:
-        logger.info(f"Processing chat query: {request.query[:100]}...")
-        # For now, just process current query
-        # TODO: Implement conversation history processing
-        response = orchestrator.answer_query(request.query)
-        
-        return QueryResponse(
-            answer=response.get('answer', 'Sorry, I could not process your query.'),
-            source=response.get('source'),
-            source_link=response.get('source_link'),
-            last_updated=response.get('last_updated'),
-            status=response.get('status', 'error')
-        )
-    except Exception as e:
-        logger.error(f"Error in chat: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
+    """Same as /query; history reserved for future use."""
+    return await query_fund(request)
+
 
 if __name__ == "__main__":
-    # Opt-in uvicorn — Streamlit (`streamlit_app.py`) is the deployment entrypoint.
-    # If Cloud wrongly Main-files this script, show UI instead of sys.exit (404 health checks).
-    from streamlit_misentry import run_backend_cli_or_streamlit_stub
+    import uvicorn
 
-    run_backend_cli_or_streamlit_stub("app:app", logger=logger)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(
+        "backend.app:app",
+        host=host,
+        port=port,
+        workers=1,
+        reload=False,
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
+    )

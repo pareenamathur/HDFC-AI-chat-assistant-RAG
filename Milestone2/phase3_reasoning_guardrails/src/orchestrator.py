@@ -22,8 +22,8 @@ class RAGOrchestrator:
         self,
         persist_directory: str,
         scheme_names: list,
-        use_bm25: bool = True,
-        use_reranker: bool = True,
+        use_bm25: bool = False,
+        use_reranker: bool = False,
         vector_fetch_k: int = 12,
     ):
         self.qp = QueryProcessor(scheme_names)

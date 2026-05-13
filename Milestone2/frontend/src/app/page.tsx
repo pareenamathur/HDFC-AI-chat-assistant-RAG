@@ -1,8 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Send, Bot, User, ExternalLink, Clock, MessageSquare, Settings, Plus, Trash2, Menu } from 'lucide-react';
-import axios from 'axios';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Send,
+  Bot,
+  User,
+  ExternalLink,
+  Clock,
+  MessageSquare,
+  Menu,
+  Loader2,
+  WifiOff,
+  Wifi,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  fetchBackendHealth,
+  postQuery,
+  apiErrorMessage,
+  API_BASE_URL,
+  type HealthResponse,
+  type QueryResponse,
+} from '@/lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,21 +31,50 @@ interface Message {
   last_updated?: string;
 }
 
-interface ApiResponse {
-  answer: string;
-  source?: string;
-  source_link?: string;
-  last_updated?: string;
-  status: string;
-}
-
 const SUGGESTED_QUESTIONS = [
-  "What is the expense ratio of HDFC Balanced Advantage Fund?",
-  "How do I start an SIP in HDFC funds?",
-  "What is the exit load for HDFC Flexi Cap Fund?",
-  "Which is the best HDFC fund for beginners?",
-  "How does NAV work in mutual funds?"
+  'What is the expense ratio of HDFC Balanced Advantage Fund?',
+  'What is the exit load for HDFC Flexi Cap Fund?',
+  'How does NAV work for mutual funds?',
 ];
+
+function ApiStatusPill({
+  health,
+  loading,
+}: {
+  health: HealthResponse | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-hdfc-border bg-hdfc-elevated px-3 py-1 text-xs font-medium text-gray-300">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+        Checking API…
+      </span>
+    );
+  }
+  if (!health || health.status !== 'healthy') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-950/50 px-3 py-1 text-xs font-medium text-red-200">
+        <WifiOff className="h-3.5 w-3.5" />
+        API offline
+      </span>
+    );
+  }
+  if (health.ready) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-950/40 px-3 py-1 text-xs font-medium text-teal-200">
+        <Wifi className="h-3.5 w-3.5" />
+        Ready
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-xs font-medium text-amber-100">
+      <AlertCircle className="h-3.5 w-3.5" />
+      Live · models load on first question
+    </span>
+  );
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,56 +82,54 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [chatHistory, setChatHistory] = useState<string[]>([]);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-  useEffect(() => {
-    // Check backend health on mount
-    checkBackendHealth();
+  const refreshHealth = useCallback(async () => {
+    const h = await fetchBackendHealth();
+    setHealth(h);
+    setHealthLoading(false);
+    return h;
   }, []);
 
-  const checkBackendHealth = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/health`);
-      console.log('Backend health:', response.data);
-    } catch (error) {
-      console.error('Backend not available:', error);
-    }
-  };
+  useEffect(() => {
+    refreshHealth();
+    const id = setInterval(refreshHealth, 20000);
+    return () => clearInterval(id);
+  }, [refreshHealth]);
 
   const handleSendMessage = async (messageText?: string) => {
     const text = messageText || input.trim();
     if (!text) return;
 
     const userMessage: Message = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setShowWelcome(false);
     setIsLoading(true);
 
     try {
-      const response = await axios.post<ApiResponse>(`${API_BASE_URL}/query`, {
-        query: text,
-        chat_history: messages
-      });
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const data: QueryResponse = await postQuery(text, history);
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: response.data.answer,
-        source: response.data.source,
-        source_link: response.data.source_link,
-        last_updated: response.data.last_updated
+        content: data.answer,
+        source: data.source,
+        source_link: data.source_link,
+        last_updated: data.last_updated,
       };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
+      setMessages((prev) => [...prev, assistantMessage]);
+      void refreshHealth();
+    } catch (err) {
+      const assistantMessage: Message = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again later.'
+        content: apiErrorMessage(err),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -94,209 +140,225 @@ export default function Home() {
     setShowWelcome(true);
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-    setShowWelcome(true);
-    setInput('');
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      void handleSendMessage();
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-white border-r border-gray-200 flex flex-col`}>
-        <div className="p-4 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-blue-600">HDFC Mutual Fund Assistant</h1>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4">
-          <button
-            onClick={handleNewChat}
-            className="w-full flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-4"
-          >
-            <Plus size={16} />
-            New Chat
-          </button>
-          
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Chat History</h3>
-            <div className="space-y-1">
-              {chatHistory.length === 0 ? (
-                <p className="text-sm text-gray-500">No previous chats</p>
-              ) : (
-                chatHistory.map((chat, index) => (
-                  <div key={index} className="text-sm text-gray-600 hover:bg-gray-100 p-2 rounded cursor-pointer">
-                    Chat {index + 1}
-                  </div>
-                ))
-              )}
-            </div>
+    <div className="flex min-h-screen bg-hdfc-bg">
+      <aside
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-0'
+        } shrink-0 overflow-hidden border-r border-hdfc-border bg-hdfc-surface transition-all duration-300`}
+      >
+        <div className="flex h-full min-w-[16rem] flex-col">
+          <div className="border-b border-hdfc-border p-4">
+            <h1 className="text-lg font-semibold tracking-tight text-white">
+              HDFC MF Assistant
+            </h1>
+            <p className="mt-1 text-xs text-gray-400">Facts only · Not advice</p>
           </div>
-          
-          <button
-            onClick={handleClearChat}
-            className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 size={16} />
-            Clear Current Chat
-          </button>
-        </div>
-        
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Settings size={16} />
-            Settings
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            <button
+              type="button"
+              onClick={() => {
+                setMessages([]);
+                setShowWelcome(true);
+                setInput('');
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-card transition hover:bg-teal-500"
+            >
+              New chat
+            </button>
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="rounded-lg border border-hdfc-border px-4 py-2 text-sm text-gray-300 transition hover:bg-hdfc-elevated"
+            >
+              Clear conversation
+            </button>
+          </div>
+          <div className="border-t border-hdfc-border p-4 text-xs text-gray-500">
+            <p className="font-mono text-[10px] break-all text-gray-600">
+              {API_BASE_URL}
+            </p>
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-hdfc-border bg-hdfc-surface/80 px-4 py-3 backdrop-blur">
           <button
+            type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="rounded-lg p-2 text-gray-400 hover:bg-hdfc-elevated hover:text-white"
+            aria-label="Toggle sidebar"
           >
             <Menu size={20} />
           </button>
-          <h2 className="text-lg font-semibold text-gray-800">Mutual Fund Assistant</h2>
-          <div className="w-10"></div>
-        </div>
+          <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-3">
+            <h2 className="text-sm font-semibold text-white sm:text-base">
+              Mutual fund information
+            </h2>
+            <ApiStatusPill health={health} loading={healthLoading} />
+          </div>
+          <div className="w-10" />
+        </header>
 
-        {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {showWelcome && messages.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="mb-8">
-                <Bot size={48} className="mx-auto text-blue-600 mb-4" />
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to HDFC Mutual Fund Assistant</h1>
-                <p className="text-gray-600 mb-8">Ask me anything about HDFC mutual funds</p>
-              </div>
+        <main className="custom-scrollbar flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            {showWelcome && messages.length === 0 ? (
+              <div className="mx-auto max-w-3xl text-center">
+                <div className="mb-10 pt-4">
+                  <Bot className="mx-auto mb-6 h-14 w-14 text-teal-400" />
+                  <h1 className="mb-3 text-3xl font-bold tracking-tight text-white md:text-4xl">
+                    HDFC Mutual Fund Assistant
+                  </h1>
+                  <p className="text-gray-400">
+                    Ask factual questions about HDFC schemes — answers use your indexed corpus.
+                  </p>
+                </div>
 
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8 text-left max-w-2xl mx-auto">
-                <p className="text-sm text-yellow-800">
-                  <strong>Disclaimer:</strong> This is an AI assistant providing information about HDFC mutual funds. 
-                  Please consult with a financial advisor before making investment decisions.
-                </p>
-              </div>
+                <div className="mb-10 rounded-lg border border-amber-500/30 bg-amber-950/30 px-4 py-3 text-left text-sm text-amber-100/90">
+                  <strong className="text-amber-200">Disclaimer:</strong> Informational only.
+                  Not investment advice. Consult a qualified advisor before investing.
+                </div>
 
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">Suggested Questions</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-                  {SUGGESTED_QUESTIONS.map((question, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSendMessage(question)}
-                      className="p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all text-left"
-                    >
-                      <p className="text-sm text-gray-700">{question}</p>
-                    </button>
-                  ))}
+                <div className="mb-6 text-left">
+                  <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                    Suggested questions
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {SUGGESTED_QUESTIONS.map((question, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => void handleSendMessage(question)}
+                        className="rounded-xl border border-hdfc-border bg-hdfc-elevated p-4 text-left text-sm text-gray-200 shadow-card transition hover:border-teal-500/50 hover:bg-hdfc-surface"
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4 max-w-4xl mx-auto">
-              {messages.map((message, index) => (
-                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-2xl ${message.role === 'user' ? 'order-2' : 'order-1'}`}>
-                    <div className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`p-3 rounded-2xl ${
-                        message.role === 'user' 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                      </div>
-                      <div className={`mt-1 ${message.role === 'user' ? 'text-right' : ''}`}>
-                        {message.role === 'user' ? (
-                          <User size={16} className="text-blue-600" />
-                        ) : (
-                          <Bot size={16} className="text-gray-600" />
-                        )}
-                      </div>
-                    </div>
-                    
-                    {message.role === 'assistant' && (message.source || message.source_link || message.last_updated) && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          {message.source_link ? (
-                            <a 
-                              href={message.source_link} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                            >
-                              <ExternalLink size={14} />
-                              {message.source}
-                            </a>
-                          ) : message.source ? (
-                            <span className="flex items-center gap-1">
-                              <MessageSquare size={14} />
-                              {message.source}
-                            </span>
-                          ) : null}
-                          
-                          {message.last_updated && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={14} />
-                              {message.last_updated}
-                            </span>
+            ) : (
+              <div className="mx-auto max-w-3xl space-y-6">
+                {messages.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[90%] sm:max-w-2xl ${
+                        message.role === 'user' ? 'order-2' : 'order-1'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-start gap-3 ${
+                          message.role === 'user' ? 'flex-row-reverse' : ''
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 shrink-0 rounded-full p-2 ${
+                            message.role === 'user'
+                              ? 'bg-teal-600/30 text-teal-300'
+                              : 'bg-hdfc-elevated text-gray-400'
+                          }`}
+                        >
+                          {message.role === 'user' ? (
+                            <User size={16} />
+                          ) : (
+                            <Bot size={16} />
                           )}
                         </div>
+                        <div
+                          className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
+                            message.role === 'user'
+                              ? 'bg-teal-700/40 text-white ring-1 ring-teal-500/30'
+                              : 'bg-hdfc-elevated text-gray-100 ring-1 ring-white/5'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-3">
-                    <Bot size={16} className="text-gray-600" />
-                    <div className="p-3 rounded-2xl bg-gray-100">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      </div>
+
+                      {message.role === 'assistant' &&
+                        (message.source || message.source_link || message.last_updated) && (
+                          <div className="mt-2 ml-11 rounded-lg border border-hdfc-border bg-hdfc-surface/80 px-3 py-2 text-xs text-gray-400">
+                            <div className="flex flex-wrap items-center gap-4">
+                              {message.source_link ? (
+                                <a
+                                  href={message.source_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300"
+                                >
+                                  <ExternalLink size={12} />
+                                  {message.source || 'Source'}
+                                </a>
+                              ) : message.source ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <MessageSquare size={12} />
+                                  {message.source}
+                                </span>
+                              ) : null}
+                              {message.last_updated && (
+                                <span className="inline-flex items-center gap-1 text-gray-500">
+                                  <Clock size={12} />
+                                  {message.last_updated}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                ))}
 
-        {/* Input Area */}
-        <div className="border-t border-gray-200 p-4 bg-white">
-          <div className="max-w-4xl mx-auto flex gap-3">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask about HDFC mutual funds..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              disabled={isLoading}
-            />
-            <button
-              onClick={() => handleSendMessage()}
-              disabled={isLoading || !input.trim()}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              <Send size={16} />
-              Send
-            </button>
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="ml-11 flex items-center gap-2 rounded-2xl bg-hdfc-elevated px-4 py-3 ring-1 ring-white/5">
+                      <Loader2 className="h-5 w-5 animate-spin text-teal-400" />
+                      <span className="text-sm text-gray-400">Thinking…</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </div>
+
+          <div className="border-t border-hdfc-border bg-hdfc-surface p-4">
+            <div className="mx-auto flex max-w-3xl gap-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  health?.status === 'healthy'
+                    ? 'Ask about HDFC mutual funds…'
+                    : 'Waiting for API… you can still type'
+                }
+                className="min-w-0 flex-1 rounded-xl border border-hdfc-border bg-hdfc-bg px-4 py-3 text-[15px] text-gray-100 placeholder:text-gray-600 focus:border-teal-500/50 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:opacity-50"
+                disabled={isLoading}
+                aria-label="Message input"
+              />
+              <button
+                type="button"
+                onClick={() => void handleSendMessage()}
+                disabled={isLoading || !input.trim()}
+                className="flex shrink-0 items-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-card transition hover:bg-teal-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-500"
+              >
+                <Send size={18} />
+                Send
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

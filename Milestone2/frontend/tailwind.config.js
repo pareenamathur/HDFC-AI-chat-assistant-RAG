@@ -8,24 +8,22 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+        hdfc: {
+          bg: '#0b0f14',
+          surface: '#111827',
+          elevated: '#1f2937',
+          border: '#374151',
+          accent: '#2dd4bf',
+          'accent-dim': '#0d9488',
         },
       },
-      animation: {
-        'bounce-delay-200': 'bounce 1s infinite 0.2s',
-        'bounce-delay-400': 'bounce 1s infinite 0.4s',
+      fontFamily: {
+        sans: ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        card: '0 1px 0 0 rgba(255,255,255,0.04) inset, 0 4px 24px rgba(0,0,0,0.35)',
       },
     },
   },
   plugins: [],
-}
+};

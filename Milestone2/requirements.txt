@@ -1,18 +1,15 @@
-# Streamlit Cloud — CPU-only, minimal surface area.
+# HDFC MF Assistant — Production API (Railway). Python 3.11. CPU-only. No Streamlit.
 # Install: pip install -r requirements.txt
 #
-# CPU-only PyTorch: use +cpu wheels from PyTorch. Pin matches sentence-transformers;
-# (torch==2.0.0+cpu is not published for Python 3.12+ — use 2.2.x+cpu locally & on Cloud.)
+# Protobuf / gRPC: pure-Python protobuf implementation avoids many "Descriptors cannot be
+# created directly" crashes when mixing chromadb / sentence-transformers wheels.
+# Override locally only if you know your stack: PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=cpp
 
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 torch==2.2.2+cpu
 numpy>=1.26.0,<2
-# Pinned per deployment stability (grpc/chroma may upgrade protobuf unless constrained).
-protobuf==3.20.3
-streamlit>=1.28.0,<2
-python-dotenv>=1.0.0
-# 1.x ships reliable wheels on Linux (Streamlit Cloud) and modern environments.
+protobuf>=4.25.0,<6
 chromadb>=1.0.0,<2
 sentence-transformers>=2.2.0,<3
 groq>=0.4.0
@@ -20,6 +17,12 @@ psutil>=5.9.0
 tqdm>=4.65.0
 thefuzz>=0.20.0
 regex>=2023.0.0
+python-dotenv>=1.0.0
 
-# Optional: only if USE_BM25=true (not recommended on Streamlit Cloud)
+fastapi>=0.104.0,<1
+uvicorn[standard]>=0.24.0,<1
+python-multipart>=0.0.6
+pydantic>=2.0.0,<3
+
+# Optional sparse retrieval (disabled by default via USE_BM25=false)
 # rank-bm25>=0.2.2

@@ -30,8 +30,8 @@ class HybridRetriever:
         reranker_model_name: str = "BAAI/bge-reranker-base",
         vector_weight: float = 0.7,
         bm25_weight: float = 0.3,
-        use_bm25: bool = True,
-        use_reranker: bool = True,
+        use_bm25: bool = False,
+        use_reranker: bool = False,
         vector_fetch_k: int = 12,
     ):
         self.persist_directory = persist_directory
