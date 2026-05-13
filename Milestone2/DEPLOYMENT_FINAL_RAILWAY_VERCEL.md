@@ -18,6 +18,18 @@
 
 **Python:** 3.11.x (see `runtime.txt`). Features like `asyncio.timeout` require 3.11+.
 
+### `GET /health` (never fails)
+
+Returns **`status: healthy`** and **`ready: true`** once the worker has finished startup — **even with no Railway env vars** and **even if Chroma is missing** (then `degraded: true` after the first failed RAG init attempt).
+
+| Field | Meaning |
+|-------|---------|
+| `ready` | Process accepted traffic (always `true` after boot). |
+| `mock_mode` | No `GROQ_API_KEY` — LLM uses MockLLM when RAG runs. |
+| `chroma_loaded` | Chroma-backed retriever initialized. |
+| `model_loaded` | At least one successful embedding-backed query completed. |
+| `degraded` | RAG init failed (e.g. missing index); `/query` returns placeholders. |
+
 ---
 
 ## 1. Railway — exact steps
@@ -112,8 +124,8 @@ Target: **startup** roughly **under ~200 MB RSS** on Linux after schemes load (d
 |------|------------|
 | OOM on first query | Raise Railway RAM; lower `VECTOR_FETCH_K`; keep BM25/reranker off. |
 | Protobuf / gRPC mismatch | Pinned ranges + pure-Python protobuf runtime flag in app bootstrap. |
-| Missing index | `/health` still **healthy**; `ready` false until RAG loads; `/query` returns **503** if init fails. |
-| Missing Groq key | **MockLLM** — process still starts. |
+| Missing index | `/health` stays **healthy** with **`ready: true`** after boot; **`degraded: true`** once a query proves Chroma cannot load; **`/query`** returns a **safe placeholder** (`status: degraded`), not HTTP 503. |
+| Missing Groq key | **`mock_mode: true`** in `/health`; **MockLLM** when RAG works; no startup failure. |
 | Hanging LLM | `LLM_TIMEOUT_SECONDS` + `QUERY_TIMEOUT_SECONDS`. |
 | CORS blocked | Set `CORS_ALLOW_ORIGINS` to your Vercel domain. |
 
@@ -123,7 +135,7 @@ Target: **startup** roughly **under ~200 MB RSS** on Linux after schemes load (d
 
 | Symptom | Check |
 |---------|--------|
-| 503 on `/query` | Logs for Chroma path / missing `data/indexed`; verify `INDEXED_DATA_PATH`. |
+| 503 on `/query` | Rare; most failures return **200** with `status: error` or `degraded`. If you see 503, check middleware or proxy. |
 | Slow first answer | Expected “cold” load (MiniLM + Chroma). |
 | Timeout | Increase `QUERY_TIMEOUT_SECONDS` slightly or shorten prompts. |
 | Wrong CORS | Railway `CORS_ALLOW_ORIGINS` includes exact Vercel origin (scheme + host). |
@@ -153,11 +165,11 @@ Target: **startup** roughly **under ~200 MB RSS** on Linux after schemes load (d
 
 1. [ ] Push backend + frontend changes to GitHub (`main`).
 2. [ ] Deploy **Railway** (root `Milestone2`).
-3. [ ] `curl https://<railway>/health` → `status: healthy`.
-4. [ ] `curl -X POST https://<railway>/query -H "Content-Type: application/json" -d '{"query":"What is NAV?","chat_history":[]}'` → JSON answer or explicit error body.
+3. [ ] `curl https://<railway>/health` → `status: healthy`, **`ready: true`** (even with zero env vars). Inspect `mock_mode`, `chroma_loaded`, `degraded`.
+4. [ ] `curl -X POST https://<railway>/query -H "Content-Type: application/json" -d '{"query":"What is NAV?","chat_history":[]}'` → JSON answer or placeholder (`status: degraded`) if index is missing.
 5. [ ] Set Vercel `NEXT_PUBLIC_API_URL` to Railway URL.
 6. [ ] Deploy **Vercel** (`Milestone2/frontend`).
-7. [ ] Open Vercel URL → status pill **Live** / **Ready** after first query.
+7. [ ] Open Vercel URL → status pill reflects **degraded** / **demo LLM** / **RAG ready** from `/health`.
 
 ---
 

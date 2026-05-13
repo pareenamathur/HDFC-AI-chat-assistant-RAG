@@ -29,6 +29,10 @@ export type HealthResponse = {
   ready?: boolean;
   schemes_loaded?: number;
   memory_mb?: number | null;
+  model_loaded?: boolean;
+  chroma_loaded?: boolean;
+  mock_mode?: boolean;
+  degraded?: boolean;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {

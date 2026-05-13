@@ -60,18 +60,34 @@ function ApiStatusPill({
       </span>
     );
   }
-  if (health.ready) {
+  if (health.degraded) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-xs font-medium text-amber-100">
+        <AlertCircle className="h-3.5 w-3.5" />
+        Degraded — no vector index
+      </span>
+    );
+  }
+  if (health.mock_mode) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-950/40 px-3 py-1 text-xs font-medium text-teal-200">
         <Wifi className="h-3.5 w-3.5" />
-        Ready
+        Online · demo LLM
+      </span>
+    );
+  }
+  if (health.chroma_loaded) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-950/40 px-3 py-1 text-xs font-medium text-teal-200">
+        <Wifi className="h-3.5 w-3.5" />
+        RAG ready
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-xs font-medium text-amber-100">
-      <AlertCircle className="h-3.5 w-3.5" />
-      Live · models load on first question
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-600 bg-hdfc-elevated px-3 py-1 text-xs font-medium text-gray-300">
+      <Wifi className="h-3.5 w-3.5" />
+      API online
     </span>
   );
 }
