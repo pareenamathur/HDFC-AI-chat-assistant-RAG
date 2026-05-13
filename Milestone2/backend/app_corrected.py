@@ -172,19 +172,6 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
 
 if __name__ == "__main__":
-    if os.getenv("ALLOW_LOCAL_FASTAPI", "").strip().lower() not in ("1", "true", "yes"):
-        print(
-            "FastAPI is opt-in. Deployment uses streamlit_app.py.\n"
-            "ALLOW_LOCAL_FASTAPI=1 python app_corrected.py",
-            file=sys.stderr,
-        )
-        raise SystemExit(0)
-    import uvicorn
+    from streamlit_misentry import run_backend_cli_or_streamlit_stub
 
-    uvicorn.run(
-        "app_corrected:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", "8501")),
-        reload=False,
-        access_log=True,
-    )
+    run_backend_cli_or_streamlit_stub("app_corrected:app", default_port="8501")

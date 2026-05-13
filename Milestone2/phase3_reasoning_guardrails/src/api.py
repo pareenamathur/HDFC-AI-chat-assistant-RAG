@@ -99,14 +99,12 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    # Opt-in — deployment uses streamlit_app.py; avoid accidental uvicorn from this file.
-    if os.getenv("ALLOW_LOCAL_FASTAPI", "").strip().lower() not in ("1", "true", "yes"):
-        print(
-            "API server not started by default. Use Streamlit for deployment.\n"
-            "From repo root: ALLOW_LOCAL_FASTAPI=1 uvicorn phase3_reasoning_guardrails.src.api:app --host 127.0.0.1 --port 8000",
-            file=sys.stderr,
-        )
-        raise SystemExit(0)
-    import uvicorn
+    from pathlib import Path
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    _backend = Path(__file__).resolve().parents[2] / "backend"
+    if str(_backend) not in sys.path:
+        sys.path.insert(0, str(_backend))
+    from streamlit_misentry import run_backend_cli_or_streamlit_stub
+
+    # Pass ASGI app object (opt-in). If Cloud Main-file points here, show stub page — no sys.exit(0).
+    run_backend_cli_or_streamlit_stub(None, uvicorn_app=app, default_port="8000")

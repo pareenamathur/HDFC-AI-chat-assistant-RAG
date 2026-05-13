@@ -295,27 +295,8 @@ async def chat_with_history(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error in chat: {str(e)}")
 
 if __name__ == "__main__":
-    # Opt-in only — Streamlit (`streamlit_app.py`) is the supported deployment entrypoint.
-    # Prevents accidental long-running servers during tooling / `python backend/app.py`.
-    if os.getenv("ALLOW_LOCAL_FASTAPI", "").strip().lower() not in ("1", "true", "yes"):
-        print(
-            "FastAPI is not started by default. Use Streamlit for deployment.\n"
-            "Run API locally: ALLOW_LOCAL_FASTAPI=1 python app.py\n"
-            "Or: uvicorn app:app --host 127.0.0.1 --port 8000",
-            file=sys.stderr,
-        )
-        raise SystemExit(0)
-    import uvicorn
+    # Opt-in uvicorn — Streamlit (`streamlit_app.py`) is the deployment entrypoint.
+    # If Cloud wrongly Main-files this script, show UI instead of sys.exit (404 health checks).
+    from streamlit_misentry import run_backend_cli_or_streamlit_stub
 
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
-    logger.info("Starting FastAPI server on %s:%s", host, port)
-    uvicorn.run(
-        "app:app",
-        host=host,
-        port=port,
-        workers=1,
-        reload=False,
-        access_log=True,
-        log_level=os.getenv("LOG_LEVEL", "info").lower(),
-    )
+    run_backend_cli_or_streamlit_stub("app:app", logger=logger)
