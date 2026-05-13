@@ -1,73 +1,40 @@
-# Data Directory
+# `Milestone2/data/` — required layout
 
-This directory contains all data for the Mutual Fund FAQ Assistant project, organized by processing stage.
+Your repository should keep this structure (paths relative to **`Milestone2/`**):
 
-## Directory Structure
-
+```text
+Milestone2/
+└── data/
+    ├── indexed/      # Chroma vector store (see indexed/README.md)
+    └── processed/    # Pipeline JSON (e.g. chunked_data_phase1.4.json)
 ```
+
+| Folder | In Git | Purpose |
+|--------|--------|---------|
+| **`processed/`** | Yes (JSON artifacts) | Scheme names + chunks for ingestion / API startup scheme list |
+| **`indexed/`** | **README only**; Chroma files are **gitignored** (`data/indexed/*`) | Runtime vector DB — build locally or in CI, then deploy or mount |
+
+---
+
+# Data directory (detail)
+
+This tree holds all assistant data, organized by processing stage.
+
+## Full layout (optional folders)
+
+```text
 data/
-├── raw/           # Raw, unprocessed data from Phase 1.1 (Fetcher)
-├── html/          # Scraped HTML files from Groww URLs
-├── documents/     # Downloaded PDF documents (factsheets, KIMs, SIDs)
-├── processed/     # Cleaned and extracted data from Phases 1.2-1.3
-└── indexed/       # Chunked and embedded data ready for vector search
+├── raw/           # Optional — raw downloads (Phase 1.1)
+├── html/          # Scraped HTML (may be gitignored in your fork)
+├── documents/     # PDFs (may be gitignored)
+├── processed/     # Cleaned / chunked JSON (Phases 1.2–1.4+)
+└── indexed/       # ChromaDB persistence (Phase 1.6)
 ```
 
-## Folder Descriptions
+## Data flow (summary)
 
-### raw/
-Contains raw data as downloaded from sources before any processing.
-
-### html/
-Contains scraped HTML files from the 15 whitelisted Groww URLs.
-- Organized by scheme name
-- Each file contains the full HTML content
-
-### documents/
-Contains downloaded PDF documents (factsheets, KIMs, SIDs) from Groww pages.
-- Organized by scheme name
-- Each document has a SHA-256 checksum for integrity validation
-
-### processed/
-Contains cleaned and normalized data after Phases 1.2 (Extractor) and 1.3 (Cleaner & Normalizer).
-- Extracted text content
-- Structured data (expense ratios, exit loads, etc.)
-- Tagged documents with metadata
-- Deduplicated content
-- Chunked content from Phase 1.4
-
-### indexed/
-Contains chunked and embedded data ready for vector search (Phases 1.4-1.6).
-- Text chunks (50-1000 characters)
-- Associated metadata
-- Vector embeddings
-- ChromaDB collection files
-
-## Data Flow
-
+```text
+Fetcher → html/documents → processed → indexed (Chroma)
 ```
-Phase 1.1 (Fetcher)
-    ↓
-data/html/ (raw HTML)
-data/documents/ (raw PDFs)
-    ↓
-Phase 1.2 (Extractor)
-    ↓
-data/processed/ (extracted content)
-    ↓
-Phase 1.3 (Cleaner & Normalizer)
-    ↓
-data/processed/ (cleaned content with metadata)
-    ↓
-Phase 1.4 (Chunker)
-    ↓
-data/processed/ (chunked content)
-    ↓
-Phase 1.5 (Embedder)
-    ↓
-data/indexed/ (embedded chunks)
-    ↓
-Phase 1.6 (Indexer)
-    ↓
-data/indexed/ (ChromaDB collection)
-```
+
+See **`indexed/README.md`** for how to populate Chroma when `indexed/` is empty after clone.
