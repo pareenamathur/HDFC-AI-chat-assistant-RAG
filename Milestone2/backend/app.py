@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.21"
+APP_VERSION = "2.2.22"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -333,10 +333,89 @@ _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
 _rag_init_timed_out: bool = False
 _rag_startup_attach_started: bool = False
+_rag_attach_task: Optional[asyncio.Task] = None
+_health_nudge_scheduled: bool = False
 # True after a POST /query ends in degraded fallback, timeout, or handler error (until a successful pipeline run).
 _last_query_pipeline_degraded: bool = False
 # Last completed POST /query status (normalized lower-case), for /health transparency.
 _last_query_status_report: Optional[str] = None
+
+
+def _embed_on_startup_enabled() -> bool:
+    """Only explicit RAG_EMBEDDING_WARM=true loads MiniLM at boot (never RAG_BACKGROUND_WARM)."""
+    return _bool_env("RAG_EMBEDDING_WARM", False)
+
+
+def _startup_attach_enabled() -> bool:
+    return _bool_env("RAG_STARTUP_ATTACH", False)
+
+
+def _rag_attach_memory_ok() -> bool:
+    """Skip attach when RSS is already high — avoids OOM kill on 512 MB Railway plans."""
+    ceiling = _int_env("RAG_MAX_RSS_MB_FOR_ATTACH", 380, 200, 1200)
+    mem = _memory_mb()
+    if mem is not None and mem >= ceiling:
+        logger.warning(
+            "RAG attach deferred — RSS ~%.0f MB >= RAG_MAX_RSS_MB_FOR_ATTACH=%s (use >=1 GB RAM for full RAG)",
+            mem,
+            ceiling,
+        )
+        return False
+    return True
+
+
+def _schedule_rag_attach(app: FastAPI, *, delay_s: float, reason: str) -> None:
+    """Single-flight background Chroma/orchestrator attach (no duplicate tasks)."""
+    global _rag_startup_attach_started, _rag_attach_task
+
+    if rag_orchestrator is not None:
+        return
+    if not _chroma_index_on_disk():
+        return
+    if not _rag_attach_memory_ok():
+        return
+    if _rag_attach_task is not None and not _rag_attach_task.done():
+        return
+
+    _rag_startup_attach_started = True
+
+    async def _runner() -> None:
+        global _retrieval_warmed, _model_loaded
+        try:
+            if delay_s > 0:
+                logger.info("RAG attach waiting %.0fs before start (%s)", delay_s, reason)
+                await asyncio.sleep(delay_s)
+            if rag_orchestrator is not None:
+                return
+            if not _rag_attach_memory_ok():
+                return
+            logger.info("RAG attach starting — Chroma only, no MiniLM (%s)", reason)
+            await ensure_rag_engine_async_from_app(app)
+            if rag_orchestrator is None:
+                logger.warning(
+                    "RAG attach finished without orchestrator err=%s",
+                    (_rag_init_error or "")[:200],
+                )
+                return
+            logger.info("RAG attach OK — rag_available=true (%s)", reason)
+            if _embed_on_startup_enabled():
+                try:
+                    warm_timeout = max(
+                        30.0, min(_float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 120.0), 300.0)
+                    )
+                    async with asyncio.timeout(warm_timeout):
+                        await asyncio.to_thread(rag_orchestrator.warm_retrieval_stack)
+                    _retrieval_warmed = True
+                    _model_loaded = True
+                    logger.info("Startup embedding warm OK — rag_ready=true")
+                except TimeoutError:
+                    logger.warning("Startup embedding warm timed out — will warm on first /query")
+                except Exception:
+                    logger.exception("Startup embedding warm failed — will warm on first /query")
+        except Exception:
+            logger.exception("RAG attach task failed (%s)", reason)
+
+    _rag_attach_task = asyncio.create_task(_runner())
 
 
 def _safe_memory_mb() -> Optional[float]:
@@ -660,6 +739,11 @@ async def ensure_rag_engine_async_from_app(app: FastAPI) -> None:
         _rag_init_timed_out = False
         _degraded_no_rag = False
         groq_present = _has_groq_key()
+        if not _rag_attach_memory_ok():
+            _degraded_no_rag = True
+            _rag_init_error = _rag_init_error or "RSS too high for safe RAG attach"
+            return
+
         mem = _memory_mb()
         logger.info(
             "Starting bounded RAG init attempt %s/%s (max %.0fs) | groq_key_present=%s | RAM ~%.1f MB",
@@ -810,15 +894,21 @@ def _build_health_response() -> HealthResponse:
         if _rag_init_error:
             msg += f" ({_rag_init_error[:100]})"
     elif index_on_disk:
-        if rag_orchestrator is None and _rag_startup_attach_started:
+        attach_running = _rag_attach_task is not None and not _rag_attach_task.done()
+        if rag_orchestrator is None and attach_running:
             msg = (
-                "RAG startup attach in progress (Chroma + orchestrator). Retry /health in 20–40s. "
-                "First POST /query may still load MiniLM embeddings."
+                "RAG attach scheduled/in progress (Chroma only; ~30s after boot). "
+                "Retry /health in 30–60s. MiniLM loads on first POST /query."
+            )
+        elif rag_orchestrator is None and _rag_startup_attach_started:
+            msg = (
+                "Chroma on disk; RAG attach deferred or failed (often OOM on <1 GB RAM). "
+                "Set Railway memory >= 1 GB, or POST /query to attach on demand."
             )
         elif rag_orchestrator is None:
             msg = (
-                "Chroma index on disk but RAG not attached yet. Startup attach may have failed — "
-                "check logs for OOM; use Railway >= 1 GB RAM, then POST /query or redeploy."
+                "API healthy — Chroma on disk. RAG attaches after boot delay or on first POST /query. "
+                "Use Railway >= 1 GB RAM for reliable queries."
             )
         elif not _retrieval_warmed:
             msg = (
@@ -909,13 +999,13 @@ async def lifespan(app: FastAPI):
         _chroma_index_on_disk(),
     )
     _log_index_diagnostics()
-    if _bool_env("STARTUP_CHROMA_PROBE", True):
+    if _bool_env("STARTUP_CHROMA_PROBE", False):
         try:
             await asyncio.to_thread(_sync_chroma_sqlite_probe)
         except Exception:
             logger.exception("STARTUP_CHROMA_PROBE thread wrapper failed")
     else:
-        logger.info("STARTUP_CHROMA_PROBE=false — skipping Chroma probe at boot")
+        logger.info("STARTUP_CHROMA_PROBE=false — skipping duplicate Chroma open at boot")
     try:
         _schemes = _load_schemes_only()
     except Exception:
@@ -931,50 +1021,16 @@ async def lifespan(app: FastAPI):
         mem or -1,
     )
 
-    # Attach Chroma + orchestrator at startup (no MiniLM unless RAG_EMBEDDING_WARM=true).
-    # Default on so /health shows rag_available without waiting for first /query.
-    startup_attach = _bool_env("RAG_STARTUP_ATTACH", _bool_env("RAG_BACKGROUND_WARM", True))
-    legacy_warm = _bool_env("RAG_BACKGROUND_WARM", False)
-    embed_on_startup = _bool_env("RAG_EMBEDDING_WARM", legacy_warm)
-
-    if startup_attach and _chroma_index_on_disk():
-        global _rag_startup_attach_started
-        _rag_startup_attach_started = True
-
-        async def _startup_rag_attach() -> None:
-            global _retrieval_warmed, _model_loaded
-            try:
-                logger.info(
-                    "Startup RAG attach started (Chroma only; embed_on_startup=%s)",
-                    embed_on_startup,
-                )
-                await ensure_rag_engine_async_from_app(app)
-                if rag_orchestrator is None:
-                    logger.warning(
-                        "Startup RAG attach finished without orchestrator err=%s",
-                        (_rag_init_error or "")[:200],
-                    )
-                    return
-                logger.info("Startup RAG attach OK — rag_available=true on /health")
-                if embed_on_startup:
-                    try:
-                        warm_timeout = max(
-                            30.0, min(_float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 120.0), 300.0)
-                        )
-                        async with asyncio.timeout(warm_timeout):
-                            await asyncio.to_thread(rag_orchestrator.warm_retrieval_stack)
-                        _retrieval_warmed = True
-                        _model_loaded = True
-                        logger.info("Startup embedding warm OK — rag_ready=true on /health")
-                    except TimeoutError:
-                        logger.warning("Startup embedding warm timed out — will warm on first /query")
-                    except Exception:
-                        logger.exception("Startup embedding warm failed — will warm on first /query")
-            except Exception:
-                logger.exception("Startup RAG attach task failed")
-
-        asyncio.create_task(_startup_rag_attach())
-    elif startup_attach:
+    # Deferred Chroma attach: /health stays light until RAG_STARTUP_DELAY_SECONDS elapses.
+    if _startup_attach_enabled() and _chroma_index_on_disk():
+        delay_s = max(5.0, min(_float_env("RAG_STARTUP_DELAY_SECONDS", 30.0), 300.0))
+        logger.info(
+            "RAG_STARTUP_ATTACH=true — scheduling Chroma attach in %.0fs (embed_on_startup=%s)",
+            delay_s,
+            _embed_on_startup_enabled(),
+        )
+        _schedule_rag_attach(app, delay_s=delay_s, reason="startup")
+    elif _startup_attach_enabled():
         logger.info("RAG_STARTUP_ATTACH=true but no chroma.sqlite3 — skipping startup attach")
 
     yield
@@ -1008,15 +1064,17 @@ async def root():
 @app.get("/health", response_model=HealthResponse)
 async def health_check(request: Request):
     """Never raises; `ready` always true when this handler runs."""
+    global _health_nudge_scheduled
     if (
         rag_orchestrator is None
         and _chroma_index_on_disk()
         and _bool_env("RAG_HEALTH_NUDGE_ATTACH", True)
-        and not _rag_startup_attach_started
+        and not _health_nudge_scheduled
+        and (_rag_attach_task is None or _rag_attach_task.done())
     ):
-        global _rag_startup_attach_started
-        _rag_startup_attach_started = True
-        asyncio.create_task(ensure_rag_engine_async_from_app(request.app))
+        _health_nudge_scheduled = True
+        nudge_delay = max(0.0, min(_float_env("RAG_HEALTH_NUDGE_DELAY_SECONDS", 10.0), 120.0))
+        _schedule_rag_attach(request.app, delay_s=nudge_delay, reason="health_nudge")
     return _health_safe()
 
 

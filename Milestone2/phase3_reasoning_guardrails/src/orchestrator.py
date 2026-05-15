@@ -77,7 +77,6 @@ class RAGOrchestrator:
             return []
 
     @staticmethod
-    @staticmethod
     def _minimal_context(results: List[Dict[str, Any]]) -> str:
         parts: List[str] = []
         for i, res in enumerate(results[:4], 1):

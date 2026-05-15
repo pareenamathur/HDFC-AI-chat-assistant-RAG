@@ -5,6 +5,6 @@ builder = "nixpacks"
 [deploy]
 startCommand = "sh scripts/railway_start.sh"
 healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
+restartPolicyMaxRetries = 10

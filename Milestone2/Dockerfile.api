@@ -24,8 +24,11 @@ COPY . .
 
 EXPOSE 8000
 ENV PORT=8000 \
+    STARTUP_CHROMA_PROBE=false \
     RAG_STARTUP_ATTACH=true \
+    RAG_STARTUP_DELAY_SECONDS=30 \
     RAG_EMBEDDING_WARM=false \
-    RAG_BACKGROUND_WARM=true
+    RAG_BACKGROUND_WARM=false \
+    RAG_MAX_RSS_MB_FOR_ATTACH=380
 
 CMD ["sh", "scripts/railway_start.sh"]

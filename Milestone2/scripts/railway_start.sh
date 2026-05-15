@@ -7,10 +7,16 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 
-# Attach Chroma orchestrator at boot (light); MiniLM loads on first /query unless overridden
+# Stable Railway boot: API + /health first; Chroma attach after delay (no MiniLM at boot).
+export STARTUP_CHROMA_PROBE="${STARTUP_CHROMA_PROBE:-false}"
 export RAG_STARTUP_ATTACH="${RAG_STARTUP_ATTACH:-true}"
+export RAG_STARTUP_DELAY_SECONDS="${RAG_STARTUP_DELAY_SECONDS:-30}"
 export RAG_EMBEDDING_WARM="${RAG_EMBEDDING_WARM:-false}"
-export RAG_BACKGROUND_WARM="${RAG_BACKGROUND_WARM:-true}"
+export RAG_BACKGROUND_WARM="${RAG_BACKGROUND_WARM:-false}"
+export RAG_HEALTH_NUDGE_ATTACH="${RAG_HEALTH_NUDGE_ATTACH:-true}"
+export RAG_MAX_RSS_MB_FOR_ATTACH="${RAG_MAX_RSS_MB_FOR_ATTACH:-380}"
+export HF_HUB_DISABLE_TELEMETRY="${HF_HUB_DISABLE_TELEMETRY:-1}"
+export TRANSFORMERS_NO_ADVISORY_WARNINGS="${TRANSFORMERS_NO_ADVISORY_WARNINGS:-1}"
 
 PORT="${PORT:-8000}"
 exec uvicorn backend.app:app --host 0.0.0.0 --port "${PORT}" --workers 1
