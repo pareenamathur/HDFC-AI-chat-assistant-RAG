@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from typing import List, Dict, Any, Optional
 from llm_client import LLMProvider
@@ -21,9 +22,18 @@ class AnswerGenerator:
             multi_fund: Whether multiple funds are being discussed.
         """
         system_prompt = self._get_system_prompt(multi_fund)
-        user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
+        max_ctx = int(os.getenv("LLM_MAX_CONTEXT_CHARS", "12000"))
+        ctx = (context or "").strip()
+        if len(ctx) > max_ctx:
+            logger.warning(
+                "AnswerGenerator: truncating context %s -> %s chars",
+                len(ctx),
+                max_ctx,
+            )
+            ctx = ctx[:max_ctx] + "\n\n[Context truncated for latency.]"
+        user_prompt = f"Context:\n{ctx}\n\nQuestion: {query}"
 
-        ctx_n = len(context or "")
+        ctx_n = len(ctx)
         logger.info(
             "AnswerGenerator: LLM call starting context_chars=%s multi_fund=%s",
             ctx_n,

@@ -6,6 +6,10 @@ import time
 import traceback
 from typing import Dict, Any, Optional, List
 
+_MAX_MULTI_SCHEME_SEARCHES = max(1, min(int(os.getenv("QUERY_MAX_SCHEME_SEARCHES", "4")), 8))
+_PER_SCHEME_RESULTS = max(1, min(int(os.getenv("QUERY_PER_SCHEME_RESULTS", "2")), 5))
+_GENERAL_RESULTS = max(3, min(int(os.getenv("QUERY_GENERAL_RESULTS", "5")), 10))
+
 # Add Phase 2 and Phase 3 src to path
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(BASE, 'phase2_retrieval_layer', 'src'))
@@ -73,7 +77,38 @@ class RAGOrchestrator:
             return []
 
     @staticmethod
-    def _log_chunk_preview(results: List[Dict[str, Any]], max_chars: int = 180) -> None:
+    def _retrieval_fallback_answer(
+        self, query: str, results: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Deterministic answer from top chunks when the LLM path fails (keeps status=success)."""
+        parts: List[str] = []
+        for res in results[:3]:
+            meta = res.get("metadata") or {}
+            scheme = meta.get("scheme_name") or "HDFC fund"
+            text = (res.get("text") or "").strip().replace("\n", " ")
+            if not text:
+                continue
+            snippet = text[:320] + ("…" if len(text) > 320 else "")
+            parts.append(f"{scheme}: {snippet}")
+        if not parts:
+            return {
+                "answer": "I found related records but could not format an answer. Please try a more specific fund name.",
+                "source": None,
+                "source_link": None,
+                "last_updated": None,
+                "sources": [],
+                "status": "no_results",
+            }
+        body = " ".join(parts[:2])
+        if len(parts) > 2:
+            body += " Additional matching funds are in the indexed corpus."
+        note = (
+            " (Answer synthesized from retrieved corpus excerpts; the LLM step was unavailable. "
+            "Retry shortly for a fuller summary.)"
+        )
+        return self._apply_policy(f"{body}{note}", results)
+
+    def _log_chunk_preview(self, results: List[Dict[str, Any]], max_chars: int = 180) -> None:
         if not results:
             logger.info("chunk_preview: (no chunks)")
             return
@@ -126,23 +161,33 @@ class RAGOrchestrator:
                 scheme_filter = filters["scheme_name"]
                 if isinstance(scheme_filter, dict) and "$in" in scheme_filter:
                     is_multi = True
-                    schemes = scheme_filter["$in"]
-                    logger.info("Retrieval mode=multi-fund schemes_count=%s", len(schemes))
+                    schemes = list(scheme_filter["$in"])[:_MAX_MULTI_SCHEME_SEARCHES]
+                    if len(scheme_filter["$in"]) > len(schemes):
+                        logger.warning(
+                            "Multi-fund retrieval capped %s -> %s schemes (QUERY_MAX_SCHEME_SEARCHES)",
+                            len(scheme_filter["$in"]),
+                            len(schemes),
+                        )
+                    logger.info(
+                        "Retrieval mode=multi-fund schemes_count=%s per_scheme_k=%s",
+                        len(schemes),
+                        _PER_SCHEME_RESULTS,
+                    )
 
                     for scheme in schemes:
                         scheme_results = self._safe_search(
                             q,
-                            3,
+                            _PER_SCHEME_RESULTS,
                             {"scheme_name": scheme},
                             f"multi-fund:{str(scheme)[:48]}",
                         )
                         all_results.extend(scheme_results)
                 else:
                     logger.info("Retrieval mode=single-fund scheme=%r", scheme_filter)
-                    all_results = self._safe_search(q, 4, filters, "single-fund")
+                    all_results = self._safe_search(q, _PER_SCHEME_RESULTS + 1, filters, "single-fund")
             else:
                 logger.info("Retrieval mode=general (no scheme filter)")
-                all_results = self._safe_search(q, 5, None, "general")
+                all_results = self._safe_search(q, _GENERAL_RESULTS, None, "general")
         except Exception as e:
             logger.exception(
                 "answer_query STAGE=retrieval FAILED after_ms=%.1f err=%s",
@@ -165,7 +210,9 @@ class RAGOrchestrator:
                 filters,
             )
             t_fb = time.perf_counter()
-            all_results = self._safe_search(q, 8, None, "general-fallback-after-empty-filters")
+            all_results = self._safe_search(
+                q, min(_GENERAL_RESULTS + 2, 8), None, "general-fallback-after-empty-filters"
+            )
             logger.info(
                 "answer_query STAGE=retrieval_fallback ms=%.1f chunk_count=%s",
                 (time.perf_counter() - t_fb) * 1000,
@@ -210,23 +257,33 @@ class RAGOrchestrator:
 
         # --- Stage: llm_generate ---
         t0 = time.perf_counter()
+        raw_answer: str = ""
         try:
             raw_answer = self._get_generator().generate_answer(q, context, multi_fund=is_multi)
         except Exception as e:
             logger.exception(
-                "answer_query STAGE=llm_generate FAILED after_ms=%.1f err=%s context_chars=%s",
+                "answer_query STAGE=llm_generate FAILED after_ms=%.1f err=%s context_chars=%s — using retrieval fallback",
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
                 ctx_len,
             )
-            logger.error("answer_query STAGE=llm_generate traceback:\n%s", traceback.format_exc())
-            raise
+            return self._retrieval_fallback_answer(q, all_results)
 
-        ans_preview = (raw_answer or "")[:200] if isinstance(raw_answer, str) else repr(raw_answer)[:200]
+        if not isinstance(raw_answer, str):
+            logger.warning("answer_query STAGE=llm_generate non-string answer — retrieval fallback")
+            return self._retrieval_fallback_answer(q, all_results)
+
+        if not raw_answer.strip() or "timed out" in raw_answer.lower():
+            logger.warning(
+                "answer_query STAGE=llm_generate empty/timeout text — retrieval fallback preview=%r",
+                raw_answer[:120],
+            )
+            return self._retrieval_fallback_answer(q, all_results)
+
+        ans_preview = raw_answer[:200]
         logger.info(
-            "answer_query STAGE=llm_generate OK ms=%.1f answer_type=%s answer_preview=%r",
+            "answer_query STAGE=llm_generate OK ms=%.1f answer_preview=%r",
             (time.perf_counter() - t0) * 1000,
-            type(raw_answer).__name__,
             ans_preview,
         )
 

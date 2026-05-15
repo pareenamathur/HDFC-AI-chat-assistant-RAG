@@ -1,4 +1,5 @@
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 import logging
 from typing import Optional
@@ -8,6 +9,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+class LLMError(Exception):
+    """LLM call failed after retries or returned unusable output."""
+
+
+class LLMTimeoutError(LLMError):
+    """LLM call exceeded LLM_TIMEOUT_SECONDS."""
+
+
+def _is_retryable_groq_error(exc: BaseException) -> bool:
+    name = type(exc).__name__.lower()
+    msg = str(exc).lower()
+    if "rate" in msg and "limit" in msg:
+        return True
+    if "timeout" in msg or "timed out" in msg:
+        return True
+    if name in ("apiconnectionerror", "internalservererror", "ratelimiterror"):
+        return True
+    code = getattr(exc, "status_code", None)
+    if code in (429, 500, 502, 503, 504):
+        return True
+    return False
+
 
 class LLMProvider:
     """Base class for LLM providers."""
@@ -101,19 +126,53 @@ class GroqProvider(LLMProvider):
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         timeout_s = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
-        fut = self._pool.submit(self._create, system_prompt, user_prompt)
-        try:
-            return fut.result(timeout=timeout_s)
-        except FuturesTimeout:
-            logger.error("Groq call exceeded LLM_TIMEOUT_SECONDS=%s", timeout_s)
-            return (
-                "The answer service timed out. Please try again with a shorter question."
-            )
-        except Exception:
-            logger.exception(
-                "Groq generate failed inside thread (see nested exception from _create)"
-            )
-            raise
+        max_retries = max(0, min(int(os.getenv("LLM_MAX_RETRIES", "2")), 4))
+        last_err: Optional[BaseException] = None
+
+        for attempt in range(max_retries + 1):
+            fut = self._pool.submit(self._create, system_prompt, user_prompt)
+            try:
+                content = fut.result(timeout=timeout_s)
+                if not (content or "").strip():
+                    last_err = LLMError("Groq returned empty content")
+                    logger.warning(
+                        "Groq empty content attempt=%s/%s",
+                        attempt + 1,
+                        max_retries + 1,
+                    )
+                    if attempt < max_retries:
+                        time.sleep(1.0 * (attempt + 1))
+                        continue
+                    raise last_err
+                if attempt > 0:
+                    logger.info("Groq succeeded on retry attempt=%s", attempt + 1)
+                return content
+            except FuturesTimeout as e:
+                last_err = LLMTimeoutError(f"Groq exceeded {timeout_s}s")
+                logger.error(
+                    "Groq timeout attempt=%s/%s LLM_TIMEOUT_SECONDS=%s",
+                    attempt + 1,
+                    max_retries + 1,
+                    timeout_s,
+                )
+                if attempt < max_retries:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise last_err from e
+            except Exception as e:
+                last_err = e
+                logger.exception(
+                    "Groq generate failed attempt=%s/%s err_type=%s",
+                    attempt + 1,
+                    max_retries + 1,
+                    type(e).__name__,
+                )
+                if attempt < max_retries and _is_retryable_groq_error(e):
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise
+
+        raise last_err or LLMError("Groq generate failed")
 
 def get_llm_provider() -> LLMProvider:
     """

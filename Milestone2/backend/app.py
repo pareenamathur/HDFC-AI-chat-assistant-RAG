@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import sys
+import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -318,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.17"
+APP_VERSION = "2.2.18"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -504,7 +505,7 @@ def _fallback_query_response(query: str, *, reason: str = "unavailable") -> Dict
 
 
 def _vector_fetch_k() -> int:
-    vk = _int_env("VECTOR_FETCH_K", 10, 4, 24)
+    vk = _int_env("VECTOR_FETCH_K", 8, 4, 24)
     alt = _str_env("STREAMLIT_VECTOR_FETCH_K", "")
     if alt:
         try:
@@ -675,13 +676,60 @@ async def ensure_rag_engine_async(request: Request) -> None:
     await ensure_rag_engine_async_from_app(request.app)
 
 
+def _log_query_env_diagnostics() -> None:
+    """Log non-secret env readiness for /query debugging (Railway)."""
+    groq = _has_groq_key()
+    logger.info(
+        "POST /query env — groq_key_present=%s GROQ_MODEL=%s LLM_TIMEOUT_SECONDS=%s "
+        "LLM_MAX_RETRIES=%s VECTOR_FETCH_K=%s QUERY_TIMEOUT_SECONDS=%s",
+        groq,
+        _str_env("GROQ_MODEL", "llama-3.1-8b-instant") or "(default)",
+        _float_env("LLM_TIMEOUT_SECONDS", 60.0),
+        _int_env("LLM_MAX_RETRIES", 2, 0, 4),
+        _vector_fetch_k(),
+        _float_env("QUERY_TIMEOUT_SECONDS", 90.0),
+    )
+    if not groq:
+        logger.warning(
+            "GROQ_API_KEY is not set — answers use MockLLM (limited). Set GROQ_API_KEY on Railway."
+        )
+
+
+def _query_combined_timeout_seconds() -> float:
+    """Wall clock for init (if needed) + answer; skip full init budget when RAG already up."""
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
+    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
+    init_budget = 5.0 if rag_orchestrator is not None else init_timeout
+    return min(600.0, init_budget + query_timeout_s + 20.0)
+
+
+async def _warm_retrieval_if_needed() -> None:
+    """Load MiniLM + one probe search so /health rag_ready can flip true before first full answer."""
+    global _retrieval_warmed, _model_loaded
+    if rag_orchestrator is None or _retrieval_warmed:
+        return
+    warm_timeout = max(15.0, min(_float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 90.0), 180.0))
+    try:
+        logger.info("POST /query — warming embeddings (max %.0fs)", warm_timeout)
+        async with asyncio.timeout(warm_timeout):
+            await asyncio.to_thread(rag_orchestrator.warm_retrieval_stack)
+        _retrieval_warmed = True
+        _model_loaded = True
+        logger.info("POST /query — embedding warm OK (rag_ready should be true)")
+    except TimeoutError:
+        logger.warning("POST /query — embedding warm timed out; will warm during retrieval")
+    except Exception:
+        logger.exception("POST /query — embedding warm failed; continuing with answer_query")
+
+
 def _run_query_sync(query: str) -> Dict[str, Any]:
     if rag_orchestrator is None:
         logger.warning("_run_query_sync: no orchestrator — returning fallback (reason=no_orchestrator)")
         return _fallback_query_response(query, reason="no_orchestrator")
+    t0 = time.perf_counter()
     try:
         logger.info(
-            "Running answer_query — schemes=%s indexed=%s query_len=%s",
+            "_run_query_sync START — schemes=%s indexed=%s query_len=%s",
             len(_schemes),
             _indexed_dir(),
             len((query or "").strip()),
@@ -689,17 +737,23 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
         out = rag_orchestrator.answer_query(query)
     except Exception as e:
         logger.exception(
-            "answer_query failed — schemes=%s processed_json=%s err_type=%s",
-            len(_schemes),
-            Path(_processed_dir()) / "chunked_data_phase1.4.json",
+            "_run_query_sync FAILED after_ms=%.1f err_type=%s schemes=%s",
+            (time.perf_counter() - t0) * 1000,
             type(e).__name__,
+            len(_schemes),
         )
         return _fallback_query_response(query, reason="query_failed")
 
     global _model_loaded, _retrieval_warmed
     _retrieval_warmed = True
     _model_loaded = True
-    logger.info("Query path OK — answer_query completed; model_loaded set to True (retrieval + LLM path exercised).")
+    st = (out or {}).get("status", "unknown")
+    logger.info(
+        "_run_query_sync OK total_ms=%.1f status=%s answer_chars=%s",
+        (time.perf_counter() - t0) * 1000,
+        st,
+        len(str((out or {}).get("answer", ""))),
+    )
     gc.collect()
     return out
 
@@ -909,21 +963,34 @@ async def query_fund(request: Request, body: QueryRequest):
     if not q:
         return QueryResponse(answer="Please enter a question.", status="error")
 
-    # First request: RAG init (bounded) + answer — allow enough wall time for both phases
-    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
-    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
-    combined_ceiling = min(600.0, init_timeout + query_timeout_s + 30.0)
-
+    combined_ceiling = _query_combined_timeout_seconds()
+    _log_query_env_diagnostics()
     logger.info(
-        "POST /query — RAG lazy init + answer (single wall timeout ~%.0fs; QUERY_TIMEOUT_SECONDS=%.0fs advisory)",
+        "POST /query START query_len=%s rag_available=%s rag_ready=%s wall_timeout=%.0fs",
+        len(q),
+        rag_orchestrator is not None,
+        _retrieval_warmed,
         combined_ceiling,
-        query_timeout_s,
     )
+    t_wall = time.perf_counter()
 
     try:
         async with asyncio.timeout(combined_ceiling):
+            t0 = time.perf_counter()
             await ensure_rag_engine_async(request)
+            logger.info(
+                "POST /query STAGE=rag_init OK ms=%.1f rag_available=%s",
+                (time.perf_counter() - t0) * 1000,
+                rag_orchestrator is not None,
+            )
+            await _warm_retrieval_if_needed()
+            t0 = time.perf_counter()
             response = await asyncio.to_thread(_run_query_sync, q)
+            logger.info(
+                "POST /query STAGE=answer_query OK ms=%.1f status=%s",
+                (time.perf_counter() - t0) * 1000,
+                response.get("status"),
+            )
         st = response.get("status", "error")
         raw_sources = response.get("sources") or []
         sources: List[SourceRef] = []
@@ -946,14 +1013,28 @@ async def query_fund(request: Request, body: QueryRequest):
             status=st if isinstance(st, str) else "error",
         )
         _record_last_query_status(out.status)
+        logger.info(
+            "POST /query END status=%s total_ms=%.1f rag_ready=%s",
+            out.status,
+            (time.perf_counter() - t_wall) * 1000,
+            _retrieval_warmed,
+        )
         return out
     except TimeoutError:
-        logger.warning("POST /query timed out (combined init+answer ceiling ~%.0fs)", combined_ceiling)
+        logger.warning(
+            "POST /query STAGE=timeout total_ms=%.1f ceiling=%.0fs rag_available=%s",
+            (time.perf_counter() - t_wall) * 1000,
+            combined_ceiling,
+            rag_orchestrator is not None,
+        )
         fb = _fallback_query_response(q, reason="query_timeout")
         _record_last_query_status("timeout")
         return QueryResponse(answer=fb["answer"], status="timeout")
     except Exception:
-        logger.exception("Query failed")
+        logger.exception(
+            "POST /query STAGE=handler_error total_ms=%.1f",
+            (time.perf_counter() - t_wall) * 1000,
+        )
         fb = _fallback_query_response(q, reason="query_failed")
         _record_last_query_status("error")
         return QueryResponse(answer=fb["answer"], status="error")
