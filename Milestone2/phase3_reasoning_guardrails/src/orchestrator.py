@@ -77,6 +77,17 @@ class RAGOrchestrator:
             return []
 
     @staticmethod
+    @staticmethod
+    def _minimal_context(results: List[Dict[str, Any]]) -> str:
+        parts: List[str] = []
+        for i, res in enumerate(results[:4], 1):
+            meta = res.get("metadata") if isinstance(res.get("metadata"), dict) else {}
+            text = (res.get("text") or "").strip().replace("\n", " ")
+            scheme = meta.get("scheme_name") or "Fund"
+            if text:
+                parts.append(f"[{i}] {scheme}: {text[:480]}")
+        return "\n\n".join(parts) if parts else "No relevant context found."
+
     def _retrieval_fallback_answer(
         self, query: str, results: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
@@ -137,12 +148,12 @@ class RAGOrchestrator:
             intent = proc["intent"]
         except Exception as e:
             logger.exception(
-                "answer_query STAGE=process_query FAILED after_ms=%.1f err=%s",
+                "answer_query STAGE=process_query FAILED after_ms=%.1f err=%s — using general retrieval",
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
             )
-            logger.error("answer_query STAGE=process_query traceback:\n%s", traceback.format_exc())
-            raise
+            filters = {}
+            intent = None
 
         logger.info(
             "answer_query STAGE=process_query OK ms=%.1f filters=%s intent=%s",
@@ -190,11 +201,11 @@ class RAGOrchestrator:
                 all_results = self._safe_search(q, _GENERAL_RESULTS, None, "general")
         except Exception as e:
             logger.exception(
-                "answer_query STAGE=retrieval FAILED after_ms=%.1f err=%s",
+                "answer_query STAGE=retrieval FAILED after_ms=%.1f err=%s — recovery general search",
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
             )
-            raise
+            all_results = self._safe_search(q, _GENERAL_RESULTS, None, "recovery-general")
 
         logger.info(
             "answer_query STAGE=retrieval OK ms=%.1f chunk_count=%s intent=%s",
@@ -237,13 +248,12 @@ class RAGOrchestrator:
             context = self.builder.build_context(all_results, intent=intent)
         except Exception as e:
             logger.exception(
-                "answer_query STAGE=build_context FAILED after_ms=%.1f err=%s chunks=%s",
+                "answer_query STAGE=build_context FAILED after_ms=%.1f err=%s chunks=%s — minimal context",
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
                 len(all_results),
             )
-            logger.error("answer_query STAGE=build_context traceback:\n%s", traceback.format_exc())
-            raise
+            context = self._minimal_context(all_results)
 
         ctx_len = len(context or "")
         logger.info(
@@ -293,12 +303,11 @@ class RAGOrchestrator:
             final_response = self._apply_policy(raw_answer, all_results)
         except Exception as e:
             logger.exception(
-                "answer_query STAGE=apply_policy FAILED after_ms=%.1f err=%s",
+                "answer_query STAGE=apply_policy FAILED after_ms=%.1f err=%s — retrieval fallback",
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
             )
-            logger.error("answer_query STAGE=apply_policy traceback:\n%s", traceback.format_exc())
-            raise
+            return self._retrieval_fallback_answer(q, all_results)
 
         logger.info(
             "answer_query STAGE=apply_policy OK ms=%.1f final_status=%s total_ms=%.1f",
@@ -320,7 +329,16 @@ class RAGOrchestrator:
 
         clean_answer = sanitize_answer_text(answer)
 
-        src = resolve_source_fields(results)
+        try:
+            src = resolve_source_fields(results)
+        except Exception:
+            logger.exception("_apply_policy: resolve_source_fields failed — using defaults")
+            src = {
+                "source": None,
+                "source_link": "https://www.hdfcfund.com/",
+                "last_updated": None,
+                "sources": [],
+            }
         source_info = src.get("source")
         source_link = src.get("source_link")
         last_updated = src.get("last_updated")

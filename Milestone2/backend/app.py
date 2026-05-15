@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.18"
+APP_VERSION = "2.2.19"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -698,9 +698,10 @@ def _log_query_env_diagnostics() -> None:
 def _query_combined_timeout_seconds() -> float:
     """Wall clock for init (if needed) + answer; skip full init budget when RAG already up."""
     init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
-    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
-    init_budget = 5.0 if rag_orchestrator is not None else init_timeout
-    return min(600.0, init_budget + query_timeout_s + 20.0)
+    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 120.0), 300.0))
+    init_budget = 3.0 if rag_orchestrator is not None else init_timeout
+    embed_budget = 0.0 if _retrieval_warmed else min(90.0, _float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 90.0))
+    return min(600.0, init_budget + embed_budget + query_timeout_s + 25.0)
 
 
 async def _warm_retrieval_if_needed() -> None:
@@ -737,11 +738,18 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
         out = rag_orchestrator.answer_query(query)
     except Exception as e:
         logger.exception(
-            "_run_query_sync FAILED after_ms=%.1f err_type=%s schemes=%s",
+            "_run_query_sync FAILED after_ms=%.1f err_type=%s schemes=%s — last-resort retrieval answer",
             (time.perf_counter() - t0) * 1000,
             type(e).__name__,
             len(_schemes),
         )
+        try:
+            q = (query or "").strip()
+            hits = rag_orchestrator._safe_search(q, 5, None, "last-resort")
+            if hits:
+                return rag_orchestrator._retrieval_fallback_answer(q, hits)
+        except Exception:
+            logger.exception("_run_query_sync last-resort retrieval also failed")
         return _fallback_query_response(query, reason="query_failed")
 
     global _model_loaded, _retrieval_warmed
@@ -1036,8 +1044,15 @@ async def query_fund(request: Request, body: QueryRequest):
             (time.perf_counter() - t_wall) * 1000,
         )
         fb = _fallback_query_response(q, reason="query_failed")
-        _record_last_query_status("error")
-        return QueryResponse(answer=fb["answer"], status="error")
+        _record_last_query_status(fb.get("status", "error"))
+        return QueryResponse(
+            answer=fb["answer"],
+            source=fb.get("source"),
+            source_link=fb.get("source_link"),
+            last_updated=fb.get("last_updated"),
+            sources=[],
+            status=fb.get("status", "error"),
+        )
 
 
 @app.post("/chat", response_model=QueryResponse)
