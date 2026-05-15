@@ -1,50 +1,77 @@
-# Daily corpus manifest freshness (repo root = Milestone2).
-# Full monthly rebuild: run Phase 1.1–1.6 locally or add a separate refresh workflow.
+# Corpus manifest freshness — stdlib only (no pip / requirements.txt).
+# Scheduled workflows run only from the repository DEFAULT branch (e.g. main).
 name: Corpus health check
 
 on:
   schedule:
     - cron: "30 4 * * *" # ~10:00 IST
   workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "data/corpus_version.json"
+      - ".github/workflows/corpus-health-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-health-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.11"
-  STALE_THRESHOLD_DAYS: 30
+  STALE_THRESHOLD_DAYS: "30"
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
+      - name: Verify corpus_version.json freshness
         run: |
-          python -m pip install --upgrade pip
-          pip install --no-cache-dir -r requirements.txt
+          python3 << 'PY'
+          import json
+          import datetime
+          import os
+          import sys
 
-      - name: Check corpus_version.json age
-        run: |
-          python -c "
-          import json, datetime, os, sys
-          threshold = int(os.environ.get('STALE_THRESHOLD_DAYS', 30))
-          path = 'data/corpus_version.json'
+          threshold = int(os.environ.get("STALE_THRESHOLD_DAYS", "30"))
+          path = "data/corpus_version.json"
+
           try:
-              with open(path) as f:
-                  m = json.load(f)
-              last = datetime.datetime.fromisoformat(m['last_updated'].replace('Z', '+00:00'))
-              if last.tzinfo is None:
-                  last = last.replace(tzinfo=datetime.timezone.utc)
-              age = (datetime.datetime.now(datetime.timezone.utc) - last).days
-              print(f'last_updated={last.isoformat()} age_days={age}')
-              if age > threshold:
-                  print(f'::error::Corpus manifest older than {threshold} days ({age}d). Run Phase 1 pipeline and commit.')
-                  sys.exit(1)
-              print('::notice::Corpus manifest is within threshold')
+              with open(path, encoding="utf-8") as f:
+                  manifest = json.load(f)
           except FileNotFoundError:
-              print(f'::error::Missing {path}')
+              print(f"::error::Missing {path} — commit data/corpus_version.json from the Phase 1 pipeline.")
               sys.exit(1)
-          "
+
+          raw = manifest.get("last_updated")
+          if not raw:
+              print("::error::corpus_version.json has no last_updated field")
+              sys.exit(1)
+
+          try:
+              last = datetime.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+          except ValueError as e:
+              print(f"::error::Invalid last_updated ISO datetime: {raw!r} ({e})")
+              sys.exit(1)
+
+          if last.tzinfo is None:
+              last = last.replace(tzinfo=datetime.timezone.utc)
+
+          now = datetime.datetime.now(datetime.timezone.utc)
+          age_days = (now - last).days
+
+          print(f"last_updated={last.isoformat()} age_days={age_days} threshold={threshold}")
+
+          if age_days > threshold:
+              print(
+                  f"::error::Corpus manifest is stale ({age_days} days > {threshold}). "
+                  "Re-run Phase 1 fetch→chunk, rebuild Chroma, commit data/, and redeploy."
+              )
+              sys.exit(1)
+
+          print("::notice::Corpus manifest is within freshness threshold")
+          PY
