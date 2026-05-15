@@ -20,8 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from backend.corpus_diagnostics import build_freshness_report
-
 # Before chromadb / grpc (protobuf + thread caps).
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -43,8 +41,13 @@ except Exception:
 # backend/app.py -> Milestone2/ (single source of truth for data paths — independent of process cwd)
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 BASE: str = str(BASE_DIR)
+_pkg_root = str(BASE_DIR)
+if _pkg_root not in sys.path:
+    sys.path.insert(0, _pkg_root)
 sys.path.insert(0, str(BASE_DIR / "phase2_retrieval_layer" / "src"))
 sys.path.insert(0, str(BASE_DIR / "phase3_reasoning_guardrails" / "src"))
+
+from .corpus_diagnostics import build_freshness_report
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
@@ -584,7 +587,7 @@ def _sync_init_rag_body() -> None:
                 _processed_dir(),
             )
 
-        if _bool_env("RAG_EMBEDDING_WARM", True):
+        if _bool_env("RAG_EMBEDDING_WARM", False):
             try:
                 orch.warm_retrieval_stack()
                 _retrieval_warmed = True
@@ -811,10 +814,13 @@ async def lifespan(app: FastAPI):
         _chroma_index_on_disk(),
     )
     _log_index_diagnostics()
-    try:
-        await asyncio.to_thread(_sync_chroma_sqlite_probe)
-    except Exception:
-        logger.exception("STARTUP_CHROMA_PROBE thread wrapper failed")
+    if _bool_env("STARTUP_CHROMA_PROBE", True):
+        try:
+            await asyncio.to_thread(_sync_chroma_sqlite_probe)
+        except Exception:
+            logger.exception("STARTUP_CHROMA_PROBE thread wrapper failed")
+    else:
+        logger.info("STARTUP_CHROMA_PROBE=false — skipping Chroma probe at boot")
     try:
         _schemes = _load_schemes_only()
     except Exception:
@@ -832,7 +838,8 @@ async def lifespan(app: FastAPI):
 
     # Warm Chroma + orchestrator in the background so /health shows rag_available without
     # requiring a synthetic first /query (Railway probes often only hit /health).
-    warm = _bool_env("RAG_BACKGROUND_WARM", True)
+    # Default off: loading Chroma + MiniLM at boot often OOM-kills small Railway plans (512MB–1GB).
+    warm = _bool_env("RAG_BACKGROUND_WARM", False)
     if warm and _chroma_index_on_disk():
 
         async def _background_rag_warm() -> None:
