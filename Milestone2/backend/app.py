@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.19"
+APP_VERSION = "2.2.20"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -328,6 +328,7 @@ _chroma_loaded: bool = False
 _model_loaded: bool = False
 _retrieval_warmed: bool = False
 _rag_init_attempted: bool = False
+_rag_init_attempt_count: int = 0
 _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
 _rag_init_timed_out: bool = False
@@ -522,9 +523,6 @@ def _sync_init_rag_body() -> None:
     if rag_orchestrator is not None:
         logger.info("RAG init skipped — orchestrator already present.")
         return
-    if _rag_init_timed_out:
-        logger.info("Skipping RAG init — previous attempt timed out (fallback active).")
-        return
 
     before = _memory_mb()
     logger.info(
@@ -562,6 +560,8 @@ def _sync_init_rag_body() -> None:
 
         rag_orchestrator = orch
         _chroma_loaded = True
+        _degraded_no_rag = False
+        _rag_init_timed_out = False
         gc.collect()
         after = _memory_mb()
         logger.info("Chroma index loaded successfully — collection mf_faq_corpus is reachable.")
@@ -630,12 +630,19 @@ async def ensure_rag_engine_async_from_app(app: FastAPI) -> None:
     """
     Lazy-init RAG with hard wall clock. Never blocks forever.
     Serialised per-process via app.state.rag_lock.
+    Retries on each /query until orchestrator attaches (no permanent lockout after one failure).
     """
-    global _rag_init_attempted, _degraded_no_rag, _rag_init_error, _rag_init_timed_out
+    global _rag_init_attempted, _rag_init_attempt_count, _degraded_no_rag, _rag_init_error, _rag_init_timed_out
 
     if rag_orchestrator is not None:
         return
-    if _degraded_no_rag and _rag_init_attempted:
+
+    max_attempts = _int_env("RAG_INIT_MAX_ATTEMPTS", 8, 1, 20)
+    if _rag_init_attempt_count >= max_attempts:
+        logger.warning(
+            "RAG init skipped — %s attempts exhausted (raise RAG_INIT_MAX_ATTEMPTS or redeploy)",
+            _rag_init_attempt_count,
+        )
         return
 
     lock = app.state.rag_lock
@@ -644,16 +651,28 @@ async def ensure_rag_engine_async_from_app(app: FastAPI) -> None:
     async with lock:
         if rag_orchestrator is not None:
             return
-        if _degraded_no_rag and _rag_init_attempted:
+        if _rag_init_attempt_count >= max_attempts:
             return
 
         _rag_init_attempted = True
+        _rag_init_attempt_count += 1
+        _rag_init_timed_out = False
+        _degraded_no_rag = False
         groq_present = _has_groq_key()
+        mem = _memory_mb()
         logger.info(
-            "Starting bounded RAG init (max %.0fs) | groq_key_present=%s (from os.getenv GROQ_API_KEY, value not logged)",
+            "Starting bounded RAG init attempt %s/%s (max %.0fs) | groq_key_present=%s | RAM ~%.1f MB",
+            _rag_init_attempt_count,
+            max_attempts,
             init_timeout,
             groq_present,
+            mem or -1,
         )
+        if mem is not None and mem < 400:
+            logger.warning(
+                "Low RSS (~%.0f MB) before RAG init — Railway plan may be too small; use >= 1 GB RAM for MiniLM + Chroma.",
+                mem,
+            )
 
         try:
             async with asyncio.timeout(init_timeout):
@@ -790,10 +809,16 @@ def _build_health_response() -> HealthResponse:
         if _rag_init_error:
             msg += f" ({_rag_init_error[:100]})"
     elif index_on_disk:
-        msg = (
-            "Chroma index on disk; RAG should attach via background warm or first POST /query. "
-            "If this persists, check logs for RAG init errors."
-        )
+        if _last_query_status_report is None:
+            msg = (
+                "API is up; Chroma index is on disk. RAG is lazy-loaded — send POST /query once to attach "
+                "the engine (first request may take 30–90s while MiniLM loads). /health alone does not load RAG."
+            )
+        else:
+            msg = (
+                "Chroma index on disk but RAG orchestrator not attached — check Railway logs for "
+                "RAG init / OOM. Ensure >= 1 GB RAM and retry POST /query."
+            )
         if mock_mode:
             msg += " mock_mode=true means GROQ_API_KEY is unset (LLM demo when RAG runs)."
     else:
