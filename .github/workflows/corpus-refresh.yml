@@ -35,11 +35,15 @@ jobs:
         run: python scripts/run_corpus_refresh.py
         working-directory: Milestone2
 
+      - name: Post-refresh sanity check
+        run: python scripts/post_refresh_check.py
+        working-directory: Milestone2
+
       - name: Commit and push updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Milestone2/data/html/ Milestone2/data/processed/ Milestone2/data/indexed/ Milestone2/data/corpus_version.json
+          git add Milestone2/data/html/ Milestone2/data/processed/ Milestone2/data/indexed/ Milestone2/data/corpus_version.json Milestone2/data/fetch_manifest.json
           if git diff --cached --quiet; then
             echo "::warning::No file changes detected — fetch may have returned identical HTML."
             exit 0

@@ -17,17 +17,18 @@ def _nav_as_of_from_text(text: str) -> str | None:
 
 
 def _format_source_header(global_idx: int, meta: Dict[str, Any], text: str = "") -> str:
-    raw = (meta.get("source_url") or "").strip()
-    updated = meta.get("last_updated_date") or meta.get("created_at") or "Unknown"
+    raw = (meta.get("page_url") or meta.get("source_url") or "").strip()
+    scheme = meta.get("scheme_name") or "Fund"
+    updated = meta.get("nav_as_of") or meta.get("last_updated_date") or meta.get("created_at") or "Unknown"
     nav_as_of = _nav_as_of_from_text(text)
     if nav_as_of:
         updated = nav_as_of
     if raw.startswith("http://") or raw.startswith("https://"):
-        return f"[Source {global_idx}]: {raw} (Updated: {updated})\n"
+        return f"[Source {global_idx}]: {scheme} | {raw} (NAV as of: {updated})\n"
     snap = f" local_snapshot_file={raw}" if raw else ""
     return (
-        f"[Source {global_idx}]: Official citation URL: {OFFICIAL_HDFC_CITATION_URL}{snap}\n"
-        f"(Updated: {updated})\n"
+        f"[Source {global_idx}]: {scheme} | Official: {OFFICIAL_HDFC_CITATION_URL}{snap}\n"
+        f"(NAV as of: {updated})\n"
     )
 
 

@@ -59,13 +59,18 @@ def main():
             # Clean metadata
             cleaned_metadata = cleaner.clean_metadata(doc.get('structured_data', {}))
             
+            page_url = doc.get('source_url') or doc.get('filename', '')
+            cleaned_metadata = dict(cleaned_metadata)
+            if page_url.startswith('http'):
+                cleaned_metadata['page_url'] = page_url
+
             # Create document for tagging
             document = {
                 'text': final_text,
                 'metadata': {
                     'scheme_name': doc['scheme_name'],
                     'document_type': 'html',
-                    'source_url': doc['filename'],
+                    'source_url': page_url,
                     'category': 'mutual_fund'
                 }
             }
@@ -74,10 +79,10 @@ def main():
             tagged_doc = tagger.tag_document(
                 scheme_name=doc['scheme_name'],
                 document_type='html',
-                source_url=doc['filename'],
+                source_url=page_url,
                 content=final_text,
                 category='mutual_fund',
-                additional_metadata=cleaned_metadata
+                additional_metadata=cleaned_metadata,
             )
             
             cleaned_data.append({

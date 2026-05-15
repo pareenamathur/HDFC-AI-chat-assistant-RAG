@@ -9,6 +9,8 @@ import logging
 from dataclasses import dataclass
 import re
 
+from groww_parser import format_nav_corpus_line, parse_groww_mf_page
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -58,10 +60,38 @@ class HTMLExtractor:
             # Extract metadata
             metadata = self._extract_metadata(soup)
             
-            # Extract structured data
             structured_data = self._extract_structured_data(soup)
-            
-            # Extract document links
+
+            page_url = url if str(url).startswith("http") else ""
+            if "groww.in" in (page_url or html) or "__NEXT_DATA__" in html:
+                groww = parse_groww_mf_page(html, page_url)
+                if groww.get("extraction_ok"):
+                    if groww.get("scheme_name"):
+                        scheme_name = groww["scheme_name"]
+                    if groww.get("nav"):
+                        structured_data["nav"] = str(groww["nav"])
+                    if groww.get("nav_date_raw"):
+                        structured_data["nav_date"] = groww["nav_date_raw"]
+                    if groww.get("nav_as_of"):
+                        structured_data["nav_as_of"] = groww["nav_as_of"]
+                    if groww.get("nav_date_display"):
+                        structured_data["nav_date_display"] = groww["nav_date_display"]
+                    if groww.get("expense_ratio") is not None:
+                        structured_data["expense_ratio"] = str(groww["expense_ratio"])
+                    if groww.get("aum") is not None:
+                        structured_data["aum"] = str(groww["aum"])
+                    if groww.get("risk"):
+                        structured_data["risk_level"] = str(groww["risk"])
+                    if groww.get("category"):
+                        structured_data["category"] = str(groww["category"])
+                    if groww.get("isin"):
+                        structured_data["isin"] = str(groww["isin"])
+                    if page_url:
+                        structured_data["page_url"] = page_url
+                    facts_line = format_nav_corpus_line(groww)
+                    if facts_line and facts_line not in text[:200]:
+                        text = facts_line + "\n\n" + text
+
             document_links = self._extract_document_links(soup, url)
             
             logger.info(f"Extracted {len(text)} characters from HTML")

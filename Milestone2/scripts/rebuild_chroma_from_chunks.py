@@ -47,7 +47,14 @@ def chunk_to_metadata(chunk: Dict[str, Any]) -> Dict[str, Any]:
     meta["section"] = str(chunk.get("section") or "general")[:256]
     meta["source_document_id"] = str(chunk.get("source_document_id") or "")[:256]
     meta["document_type"] = str(md.get("document_type") or "")[:128]
-    meta["source_url"] = _basename_only(md.get("source_url"))[:512]
+    raw_url = str(md.get("page_url") or md.get("source_url") or "")
+    if raw_url.startswith("http://") or raw_url.startswith("https://"):
+        meta["source_url"] = raw_url[:512]
+        meta["page_url"] = raw_url[:512]
+    else:
+        meta["source_url"] = _basename_only(raw_url)[:512]
+    if md.get("nav_as_of"):
+        meta["nav_as_of"] = str(md.get("nav_as_of"))[:32]
     meta["category"] = str(md.get("category") or "")[:256]
     for k in ("expense_ratio", "exit_load", "nav", "aum", "sip_minimum", "risk_level"):
         if md.get(k) is not None:

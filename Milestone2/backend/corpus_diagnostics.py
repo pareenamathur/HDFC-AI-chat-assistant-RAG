@@ -1,0 +1,128 @@
+"""Corpus manifest + NAV freshness helpers (startup logs, health, post-refresh check)."""
+from __future__ import annotations
+
+import json
+import re
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+_NAV_RE = re.compile(
+    r"NAV:\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2})\b",
+    re.IGNORECASE,
+)
+_MONTHS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+_EXPECTED_EMBEDDING = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def parse_nav_token(token: str) -> Optional[date]:
+    m = _NAV_RE.search(token or "")
+    if not m:
+        return None
+    day = int(m.group(1))
+    mon = _MONTHS.get(m.group(2).lower()[:3])
+    if not mon:
+        return None
+    yy = int(m.group(3))
+    year = 2000 + yy if yy < 100 else yy
+    try:
+        return date(year, mon, day)
+    except ValueError:
+        return None
+
+
+def collect_nav_dates_from_chunks(chunks: List[Dict[str, Any]]) -> Set[date]:
+    found: Set[date] = set()
+    for c in chunks:
+        text = c.get("text") or ""
+        for m in _NAV_RE.finditer(text):
+            d = parse_nav_token(m.group(0))
+            if d:
+                found.add(d)
+    return found
+
+
+def load_manifest(base_dir: Path) -> Optional[Dict[str, Any]]:
+    path = base_dir / "data" / "corpus_version.json"
+    if not path.is_file():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def load_chunked_nav_dates(base_dir: Path) -> Tuple[Set[date], int]:
+    path = base_dir / "data" / "processed" / "chunked_data_phase1.4.json"
+    if not path.is_file():
+        return set(), 0
+    try:
+        with open(path, encoding="utf-8") as f:
+            chunks = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return set(), 0
+    if not isinstance(chunks, list):
+        return set(), 0
+    return collect_nav_dates_from_chunks(chunks), len(chunks)
+
+
+def build_freshness_report(base_dir: Path, *, stale_nav_days: int = 7) -> Dict[str, Any]:
+    """Summarize manifest, Chroma mtime, and NAV dates found in chunked corpus."""
+    base = Path(base_dir).resolve()
+    manifest = load_manifest(base) or {}
+    nav_dates, chunk_count = load_chunked_nav_dates(base)
+    idx = base / "data" / "indexed" / "chroma.sqlite3"
+
+    chroma_mtime: Optional[str] = None
+    chroma_size: Optional[int] = None
+    if idx.is_file():
+        st = idx.stat()
+        chroma_mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        chroma_size = st.st_size
+
+    nav_sorted = sorted(nav_dates)
+    nav_max = nav_sorted[-1] if nav_sorted else None
+    nav_min = nav_sorted[0] if nav_sorted else None
+    today = datetime.now(timezone.utc).date()
+    nav_stale = False
+    nav_age_days: Optional[int] = None
+    if nav_max:
+        nav_age_days = (today - nav_max).days
+        nav_stale = nav_age_days > stale_nav_days
+
+    emb = manifest.get("embedding_model")
+    emb_mismatch = bool(emb and emb != _EXPECTED_EMBEDDING)
+
+    return {
+        "manifest_last_updated": manifest.get("last_updated"),
+        "manifest_source": manifest.get("source"),
+        "manifest_embedding_model": emb,
+        "embedding_model_mismatch": emb_mismatch,
+        "expected_embedding_model": _EXPECTED_EMBEDDING,
+        "chunks_total_manifest": manifest.get("chunks_total"),
+        "chunks_total_file": chunk_count,
+        "chroma_sqlite_mtime_utc": chroma_mtime,
+        "chroma_sqlite_size_bytes": chroma_size,
+        "nav_dates_found": [d.isoformat() for d in nav_sorted],
+        "nav_as_of_min": nav_min.isoformat() if nav_min else None,
+        "nav_as_of_max": nav_max.isoformat() if nav_max else None,
+        "nav_age_days": nav_age_days,
+        "nav_stale_warning": nav_stale,
+        "stale_nav_threshold_days": stale_nav_days,
+    }

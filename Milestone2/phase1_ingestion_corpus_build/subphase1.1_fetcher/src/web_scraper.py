@@ -33,7 +33,8 @@ class WebScraper:
         self,
         user_agent: str = None,
         request_delay: float = 2.0,
-        timeout: int = 30
+        timeout: int = 30,
+        max_retries: int = 3,
     ):
         """
         Initialize the web scraper.
@@ -45,11 +46,12 @@ class WebScraper:
         """
         self.request_delay = request_delay
         self.timeout = timeout
+        self.max_retries = max(1, int(max_retries))
         self.headers = {
             'User-Agent': user_agent or (
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/91.0.4472.124 Safari/537.36'
+                'Chrome/122.0.0.0 Safari/537.36'
             ),
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
@@ -61,80 +63,71 @@ class WebScraper:
     
     def scrape_url(self, url: str) -> ScrapedContent:
         """
-        Scrape a single URL.
-        
-        Args:
-            url: URL to scrape
-            
-        Returns:
-            ScrapedContent object with scraped data
+        Scrape a single URL with retries.
         """
-        try:
-            logger.info(f"Scraping: {url}")
-            
-            response = self.session.get(
-                url,
-                timeout=self.timeout,
-                allow_redirects=True
-            )
-            
-            if response.status_code != 200:
-                logger.warning(f"Failed to scrape {url}: HTTP {response.status_code}")
+        last_error: Optional[str] = None
+        last_status: Optional[int] = None
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                logger.info("Scraping: %s (attempt %s/%s)", url, attempt, self.max_retries)
+                response = self.session.get(
+                    url,
+                    timeout=self.timeout,
+                    allow_redirects=True,
+                )
+                last_status = response.status_code
+
+                if response.status_code != 200:
+                    last_error = f"HTTP {response.status_code}"
+                    logger.warning(
+                        "Scrape %s failed: %s (attempt %s)", url, last_error, attempt
+                    )
+                    if attempt < self.max_retries and response.status_code in (429, 500, 502, 503):
+                        time.sleep(self.request_delay * attempt)
+                        continue
+                    return ScrapedContent(
+                        url=url,
+                        html="",
+                        status_code=response.status_code,
+                        error=last_error,
+                    )
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                title = soup.find("title")
+                title_text = title.get_text(strip=True) if title else ""
+                scheme_name = self._extract_scheme_name(title_text, url)
+                links = self._extract_links(soup, url)
+
+                logger.info("Scraped OK: %s — %s", url, scheme_name)
                 return ScrapedContent(
                     url=url,
-                    html="",
+                    html=response.text,
                     status_code=response.status_code,
-                    error=f"HTTP {response.status_code}"
+                    title=title_text,
+                    scheme_name=scheme_name,
+                    links=links,
                 )
-            
-            # Parse HTML
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Extract title
-            title = soup.find('title')
-            title_text = title.get_text(strip=True) if title else ""
-            
-            # Extract scheme name from title (Groww format)
-            scheme_name = self._extract_scheme_name(title_text, url)
-            
-            # Extract all links
-            links = self._extract_links(soup, url)
-            
-            logger.info(f"✓ Scraped: {url} - {scheme_name}")
-            
-            return ScrapedContent(
-                url=url,
-                html=response.text,
-                status_code=response.status_code,
-                title=title_text,
-                scheme_name=scheme_name,
-                links=links
-            )
-            
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout while scraping {url}")
-            return ScrapedContent(
-                url=url,
-                html="",
-                status_code=None,
-                error="Request timeout"
-            )
-        except requests.exceptions.ConnectionError:
-            logger.error(f"Connection error while scraping {url}")
-            return ScrapedContent(
-                url=url,
-                html="",
-                status_code=None,
-                error="Connection error"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error scraping {url}: {str(e)}")
-            return ScrapedContent(
-                url=url,
-                html="",
-                status_code=None,
-                error=str(e)
-            )
+
+            except requests.exceptions.Timeout:
+                last_error = "Request timeout"
+                logger.warning("Timeout scraping %s (attempt %s)", url, attempt)
+            except requests.exceptions.ConnectionError:
+                last_error = "Connection error"
+                logger.warning("Connection error scraping %s (attempt %s)", url, attempt)
+            except Exception as e:
+                last_error = str(e)
+                logger.warning("Error scraping %s (attempt %s): %s", url, attempt, e)
+
+            if attempt < self.max_retries:
+                time.sleep(self.request_delay * attempt)
+
+        return ScrapedContent(
+            url=url,
+            html="",
+            status_code=last_status,
+            error=last_error or "unknown_error",
+        )
     
     def scrape_urls(self, urls: List[str]) -> List[ScrapedContent]:
         """

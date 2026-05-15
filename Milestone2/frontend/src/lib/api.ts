@@ -141,11 +141,19 @@ export async function fetchBackendHealth(): Promise<HealthResponse | null> {
   }
 }
 
+export type SourceRef = {
+  title: string;
+  url: string;
+  scheme_name?: string;
+  nav_as_of?: string;
+};
+
 export type QueryResponse = {
   answer: string;
   source?: string;
   source_link?: string;
   last_updated?: string;
+  sources?: SourceRef[];
   status: string;
 };
 
@@ -153,14 +161,26 @@ function normalizeQueryResponse(data: unknown): QueryResponse {
   if (!data || typeof data !== 'object') {
     return { answer: 'Empty response from server.', status: 'error' };
   }
-  const d = data as Partial<QueryResponse>;
+  const d = data as Partial<QueryResponse> & { sources?: unknown };
   const answer =
     typeof d.answer === 'string' && d.answer.trim() ? d.answer : 'No answer field in response.';
+  const sources: SourceRef[] = Array.isArray(d.sources)
+    ? d.sources
+        .filter((s): s is Record<string, unknown> => s != null && typeof s === 'object')
+        .map((s) => ({
+          title: String(s.title || s.scheme_name || 'Source'),
+          url: String(s.url || ''),
+          scheme_name: s.scheme_name != null ? String(s.scheme_name) : undefined,
+          nav_as_of: s.nav_as_of != null ? String(s.nav_as_of) : undefined,
+        }))
+        .filter((s) => s.url.startsWith('http'))
+    : [];
   return {
     answer,
     source: d.source,
     source_link: d.source_link,
     last_updated: d.last_updated,
+    sources,
     status: typeof d.status === 'string' ? d.status : 'ok',
   };
 }

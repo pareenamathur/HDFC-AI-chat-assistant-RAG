@@ -18,6 +18,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from backend.corpus_diagnostics import collect_nav_dates_from_chunks  # noqa: E402
+
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -41,6 +44,23 @@ def _write_manifest() -> None:
     chunked = ROOT / "data" / "processed" / "chunked_data_phase1.4.json"
     n_chunks = 0
     schemes: set[str] = set()
+    nav_dates: list[str] = []
+    fetch_stats: dict = {}
+    fetch_path = ROOT / "data" / "fetch_manifest.json"
+    if fetch_path.is_file():
+        try:
+            with open(fetch_path, encoding="utf-8") as f:
+                fm = json.load(f)
+            entries = fm.get("entries") or []
+            ok = [e for e in entries if not e.get("error")]
+            fetch_stats = {
+                "urls_total": len(entries),
+                "urls_ok": len(ok),
+                "urls_failed": len(entries) - len(ok),
+                "nav_stale_count": sum(1 for e in ok if e.get("nav_stale")),
+            }
+        except (OSError, json.JSONDecodeError):
+            pass
     if chunked.is_file():
         with open(chunked, encoding="utf-8") as f:
             data = json.load(f)
@@ -50,6 +70,8 @@ def _write_manifest() -> None:
                 sn = (c.get("scheme_name") or (c.get("metadata") or {}).get("scheme_name") or "")
                 if sn:
                     schemes.add(str(sn))
+            nav_sorted = sorted(collect_nav_dates_from_chunks(data))
+            nav_dates = [d.isoformat() for d in nav_sorted]
 
     manifest = {
         "version": f"corpus-v{datetime.now(timezone.utc).strftime('%Y.%m.%d')}",
@@ -61,6 +83,9 @@ def _write_manifest() -> None:
         "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
         "vector_store": "ChromaDB",
         "collection_name": "mf_faq_corpus",
+        "nav_as_of_dates": nav_dates,
+        "nav_as_of_max": nav_dates[-1] if nav_dates else None,
+        "fetch_stats": fetch_stats,
     }
     out = ROOT / "data" / "corpus_version.json"
     out.parent.mkdir(parents=True, exist_ok=True)

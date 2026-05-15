@@ -11,12 +11,20 @@ import {
   type QueryResponse,
 } from '@/lib/api';
 
+interface SourceRef {
+  title: string;
+  url: string;
+  scheme_name?: string;
+  nav_as_of?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   source?: string;
   source_link?: string;
   last_updated?: string;
+  sources?: SourceRef[];
   status?: string;
 }
 
@@ -180,6 +188,7 @@ export default function Home() {
         source: data.source,
         source_link: data.source_link,
         last_updated: data.last_updated,
+        sources: data.sources,
         status: data.status,
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -415,23 +424,35 @@ export default function Home() {
                             >
                               <p className="whitespace-pre-wrap break-words">{message.content}</p>
                             </div>
-                            {(message.source || message.source_link || message.last_updated) &&
+                            {(message.sources?.length ||
+                              message.source ||
+                              message.source_link ||
+                              message.last_updated) &&
                               message.status !== 'error' && (
                                 <div className="flex flex-wrap gap-xs">
-                                  {message.source_link && (
+                                  {(message.sources?.length
+                                    ? message.sources
+                                    : message.source_link
+                                      ? [
+                                          {
+                                            title: message.source || 'Go to source',
+                                            url: message.source_link,
+                                          },
+                                        ]
+                                      : []
+                                  ).map((src, i) => (
                                     <a
-                                      href={message.source_link}
+                                      key={`${src.url}-${i}`}
+                                      href={src.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant transition hover:border-primary"
                                     >
-                                      <MsIcon name="link" className="shrink-0 text-[14px]" />
-                                      <span className="truncate">
-                                        {message.source || 'HDFC Mutual Fund'}
-                                      </span>
+                                      <MsIcon name="open_in_new" className="shrink-0 text-[14px]" />
+                                      <span className="truncate">{src.title || 'Go to source'}</span>
                                     </a>
-                                  )}
-                                  {!message.source_link && message.source && (
+                                  ))}
+                                  {!message.sources?.length && !message.source_link && message.source && (
                                     <span className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant">
                                       <MsIcon name="article" className="shrink-0 text-[14px]" />
                                       <span className="truncate">{message.source}</span>
@@ -440,7 +461,7 @@ export default function Home() {
                                   {message.last_updated && (
                                     <span className="flex items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant">
                                       <MsIcon name="schedule" className="shrink-0 text-[14px]" />
-                                      {message.last_updated}
+                                      NAV as of {message.last_updated}
                                     </span>
                                   )}
                                 </div>

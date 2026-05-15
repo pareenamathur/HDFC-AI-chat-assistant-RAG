@@ -267,15 +267,16 @@ class RAGOrchestrator:
         source_info = src.get("source")
         source_link = src.get("source_link")
         last_updated = src.get("last_updated")
+        sources = src.get("sources") or []
 
-        # Apply user constraint: If we don't know, no source info.
         if is_refusal:
             return {
                 "answer": clean_answer,
                 "source": None,
                 "source_link": None,
                 "last_updated": None,
-                "status": "refusal"
+                "sources": [],
+                "status": "refusal",
             }
 
         # Ensure sentence count (crude split) - allow 4 for multi-fund
@@ -288,7 +289,8 @@ class RAGOrchestrator:
             "source": source_info,
             "source_link": source_link,
             "last_updated": last_updated,
-            "status": "success"
+            "sources": sources,
+            "status": "success",
         }
 
 if __name__ == "__main__":

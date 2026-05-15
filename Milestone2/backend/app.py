@@ -16,8 +16,11 @@ import os
 import sys
 import traceback
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from backend.corpus_diagnostics import build_freshness_report
 
 # Before chromadb / grpc (protobuf + thread caps).
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
@@ -171,6 +174,67 @@ def _log_index_diagnostics() -> None:
         ".gitignore: data/indexed/chroma.sqlite3 is NOT ignored (only *.tmp / .DS_Store under data/indexed/). "
         "Commit index files for Railway."
     )
+    _log_corpus_freshness_diagnostics()
+
+
+def _log_corpus_freshness_diagnostics() -> None:
+    """Manifest, NAV as-of dates, and index mtime — surfaces stale clone vs stale Groww scrape."""
+    try:
+        report = build_freshness_report(BASE_DIR)
+    except Exception as e:
+        logger.warning("Corpus freshness diagnostics failed: %s", e)
+        return
+
+    logger.info(
+        "Corpus manifest — last_updated=%s source=%s embedding=%s chunks(manifest=%s file=%s)",
+        report.get("manifest_last_updated"),
+        report.get("manifest_source"),
+        report.get("manifest_embedding_model"),
+        report.get("chunks_total_manifest"),
+        report.get("chunks_total_file"),
+    )
+    logger.info(
+        "Corpus NAV — dates_in_chunks=%s | as_of_min=%s as_of_max=%s age_days=%s",
+        report.get("nav_dates_found"),
+        report.get("nav_as_of_min"),
+        report.get("nav_as_of_max"),
+        report.get("nav_age_days"),
+    )
+    logger.info(
+        "Chroma on disk — mtime_utc=%s size_bytes=%s",
+        report.get("chroma_sqlite_mtime_utc"),
+        report.get("chroma_sqlite_size_bytes"),
+    )
+    if report.get("embedding_model_mismatch"):
+        logger.warning(
+            "Corpus embedding_model=%s does not match runtime MiniLM (%s). "
+            "Run scripts/run_corpus_refresh.py and git pull data/indexed/.",
+            report.get("manifest_embedding_model"),
+            report.get("expected_embedding_model"),
+        )
+    manifest_ts = report.get("manifest_last_updated")
+    chroma_ts = report.get("chroma_sqlite_mtime_utc")
+    if manifest_ts and chroma_ts:
+        try:
+            m_dt = datetime.fromisoformat(str(manifest_ts).replace("Z", "+00:00"))
+            c_dt = datetime.fromisoformat(str(chroma_ts).replace("Z", "+00:00"))
+            if c_dt < m_dt:
+                logger.warning(
+                    "chroma.sqlite3 mtime (%s) is older than corpus_version last_updated (%s) — "
+                    "git pull Milestone2/data/indexed/ or rebuild Chroma locally.",
+                    chroma_ts,
+                    manifest_ts,
+                )
+        except ValueError:
+            pass
+    if report.get("nav_stale_warning"):
+        logger.warning(
+            "NAV in corpus is stale (newest as_of=%s, %s days old, threshold=%s). "
+            "Index may be fresh but Groww HTML still shows old NAV — check fetch 404s and data/html/.",
+            report.get("nav_as_of_max"),
+            report.get("nav_age_days"),
+            report.get("stale_nav_threshold_days"),
+        )
 
 
 def _sync_chroma_sqlite_probe() -> None:
@@ -214,7 +278,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.14"
+APP_VERSION = "2.2.16"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -264,11 +328,19 @@ class QueryRequest(BaseModel):
     chat_history: List[Dict[str, str]] = []
 
 
+class SourceRef(BaseModel):
+    title: str
+    url: str
+    scheme_name: Optional[str] = None
+    nav_as_of: Optional[str] = None
+
+
 class QueryResponse(BaseModel):
     answer: str
     source: Optional[str] = None
     source_link: Optional[str] = None
     last_updated: Optional[str] = None
+    sources: List[SourceRef] = Field(default_factory=list)
     status: str
 
 
@@ -310,6 +382,14 @@ class HealthResponse(BaseModel):
     last_query_status: Optional[str] = Field(
         default=None,
         description="Normalized status of the last completed POST /query on this worker (null if none yet).",
+    )
+    corpus_last_updated: Optional[str] = Field(
+        default=None,
+        description="data/corpus_version.json last_updated (UTC) if present.",
+    )
+    nav_as_of_max: Optional[str] = Field(
+        default=None,
+        description="Newest NAV date found in chunked corpus (ISO date), if any.",
     )
 
 
@@ -622,6 +702,15 @@ def _build_health_response() -> HealthResponse:
         if mock_mode:
             msg += " (mock_mode only reflects missing GROQ_API_KEY.)"
 
+    corpus_last_updated: Optional[str] = None
+    nav_as_of_max: Optional[str] = None
+    try:
+        freshness = build_freshness_report(BASE_DIR)
+        corpus_last_updated = freshness.get("manifest_last_updated")
+        nav_as_of_max = freshness.get("nav_as_of_max")
+    except Exception:
+        pass
+
     return HealthResponse(
         status="healthy",
         ready=True,
@@ -637,6 +726,8 @@ def _build_health_response() -> HealthResponse:
         index_on_disk=index_on_disk,
         api_version=APP_VERSION,
         last_query_status=_last_query_status_report,
+        corpus_last_updated=corpus_last_updated,
+        nav_as_of_max=nav_as_of_max,
     )
 
 
@@ -796,11 +887,24 @@ async def query_fund(request: Request, body: QueryRequest):
             await ensure_rag_engine_async(request)
             response = await asyncio.to_thread(_run_query_sync, q)
         st = response.get("status", "error")
+        raw_sources = response.get("sources") or []
+        sources: List[SourceRef] = []
+        for s in raw_sources:
+            if isinstance(s, dict) and s.get("url"):
+                sources.append(
+                    SourceRef(
+                        title=str(s.get("title") or s.get("scheme_name") or "Source"),
+                        url=str(s["url"]),
+                        scheme_name=s.get("scheme_name"),
+                        nav_as_of=s.get("nav_as_of"),
+                    )
+                )
         out = QueryResponse(
             answer=response.get("answer", "") or "No answer returned.",
             source=response.get("source"),
             source_link=response.get("source_link"),
             last_updated=response.get("last_updated"),
+            sources=sources,
             status=st if isinstance(st, str) else "error",
         )
         _record_last_query_status(out.status)
