@@ -3,6 +3,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Chroma metadata stores HTML basenames, not live https URLs — models must still cite a valid link.
+OFFICIAL_HDFC_CITATION_URL = "https://www.hdfcfund.com/"
+
+
+def _format_source_header(global_idx: int, meta: Dict[str, Any]) -> str:
+    raw = (meta.get("source_url") or "").strip()
+    updated = meta.get("last_updated_date") or meta.get("created_at") or "Unknown"
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return f"[Source {global_idx}]: {raw} (Updated: {updated})\n"
+    snap = f" local_snapshot_file={raw}" if raw else ""
+    return (
+        f"[Source {global_idx}]: Official citation URL: {OFFICIAL_HDFC_CITATION_URL}{snap}\n"
+        f"(Updated: {updated})\n"
+    )
+
+
 class ContextBuilder:
     """Formats retrieved results into context for the LLM."""
 
@@ -64,10 +80,7 @@ class ContextBuilder:
                             f"{field.replace('_', ' ').title()}: {str(meta[field])}"
                         )
 
-                block = (
-                    f"[Source {global_idx}]: {meta.get('source_url', 'Unknown Source')} "
-                    f"(Updated: {meta.get('last_updated_date', 'Unknown')})\n"
-                )
+                block = _format_source_header(global_idx, meta)
                 if structured_info:
                     block += "Factual Highlights: " + " | ".join(set(structured_info)) + "\n"
                 block += f"Content: {text.strip()}"

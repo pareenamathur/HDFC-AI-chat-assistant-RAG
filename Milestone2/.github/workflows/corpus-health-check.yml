@@ -1,0 +1,50 @@
+# Daily corpus manifest freshness (repo root = Milestone2).
+# Full monthly rebuild: run Phase 1.1–1.6 locally or add a separate refresh workflow.
+name: Corpus health check
+
+on:
+  schedule:
+    - cron: "30 4 * * *" # ~10:00 IST
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  STALE_THRESHOLD_DAYS: 30
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Check corpus_version.json age
+        run: |
+          python -c "
+          import json, datetime, os, sys
+          threshold = int(os.environ.get('STALE_THRESHOLD_DAYS', 30))
+          path = 'data/corpus_version.json'
+          try:
+              with open(path) as f:
+                  m = json.load(f)
+              last = datetime.datetime.fromisoformat(m['last_updated'].replace('Z', '+00:00'))
+              if last.tzinfo is None:
+                  last = last.replace(tzinfo=datetime.timezone.utc)
+              age = (datetime.datetime.now(datetime.timezone.utc) - last).days
+              print(f'last_updated={last.isoformat()} age_days={age}')
+              if age > threshold:
+                  print(f'::error::Corpus manifest older than {threshold} days ({age}d). Run Phase 1 pipeline and commit.')
+                  sys.exit(1)
+              print('::notice::Corpus manifest is within threshold')
+          except FileNotFoundError:
+              print(f'::error::Missing {path}')
+              sys.exit(1)
+          "

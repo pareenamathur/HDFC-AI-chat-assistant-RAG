@@ -278,32 +278,32 @@ class RAGOrchestrator:
             # Extract source information
             scheme_name = metadata.get("scheme_name", "Unknown Scheme")
             source_url = metadata.get("source_url", "")
-            
-            # Check if source_url is a local file or a valid URL
+            official = "https://www.hdfcfund.com/"
+
+            # Metadata usually stores HTML basenames — still expose a valid official URL
             if source_url and not source_url.startswith("http"):
-                # It's a local file, don't use it as a link
                 source_info = scheme_name
-                source_link = None
+                source_link = official
             elif source_url and source_url.startswith("http"):
-                # It's a valid URL
                 source_info = scheme_name
                 source_link = source_url
             else:
-                # No source URL, just use scheme name
                 source_info = scheme_name
-                source_link = None
-            
-            # Get last updated date if available
-            created_at = metadata.get("created_at", "")
-            if created_at:
+                source_link = official
+
+            lud = metadata.get("last_updated_date") or metadata.get("created_at", "")
+            if lud:
                 try:
-                    # Parse the datetime and format it
                     from datetime import datetime
-                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                    last_updated = dt.strftime("%Y-%m-%d")
-                except:
+
+                    if isinstance(lud, str) and len(lud) >= 10 and lud[4] == "-" and lud[7] == "-":
+                        last_updated = lud[:10]
+                    else:
+                        dt = datetime.fromisoformat(str(lud).replace("Z", "+00:00"))
+                        last_updated = dt.strftime("%Y-%m-%d")
+                except Exception:
                     last_updated = None
-        
+
         # Apply user constraint: If we don't know, no source info.
         if is_refusal:
             return {
