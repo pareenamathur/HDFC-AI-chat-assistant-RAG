@@ -11,7 +11,7 @@
 |--------|------------|------|
 | API | FastAPI + Uvicorn (`backend.app:app`) | Railway |
 | UI | Next.js 14 (App Router) | Vercel |
-| Embeddings | `all-MiniLM-L6-v2` (lazy-loaded on first query) | Railway |
+| Embeddings | `all-MiniLM-L6-v2` (lazy-loaded; often warmed in background via `RAG_BACKGROUND_WARM`) | Railway |
 | Vector DB | ChromaDB on disk (`data/indexed/`) | Railway filesystem |
 
 **Memory strategy:** schemes load at API boot (~low MB). **MiniLM, Chroma client, and LLM** load only on the **first** `/query` or `/chat`. BM25, rerankers, and cross-encoders stay **off** unless you explicitly set `USE_BM25=true` / `USE_RERANKER=true` (not recommended on small plans).
@@ -29,8 +29,8 @@ Returns **`status: healthy`** and **`ready: true`** whenever this handler runs �
 | `rag_ready` | **`true` after first successful retrieval** (embedding path exercised); until then `rag_available` may already be `true`. |
 | `mock_mode` | **Only** “no `GROQ_API_KEY`” — LLM uses MockLLM when RAG runs; **not** tied to Chroma. |
 | `chroma_loaded` | Chroma client + collection opened during RAG init. |
-| `model_loaded` | At least one successful embedding-backed query completed. |
-| `degraded` | RAG init failed or timed out — `/query` returns placeholders until fixed. |
+| `model_loaded` | SentenceTransformer loaded and retrieval exercised (background warm or first successful `answer_query`). |
+| `degraded` | **`true`** if RAG init failed/timed out **or** the **last** `POST /query` ended in **`error`**, **`timeout`**, or **`degraded`** status — until a later query returns **`success`**, **`refusal`**, or **`no_results`**. |
 | `index_on_disk` | **`chroma.sqlite3`** exists at `INDEXED_DATA_PATH` — corpus shipped; **`rag_available`** still false until first **`POST /query`**. |
 
 Bounded RAG init: set **`RAG_INIT_TIMEOUT_SECONDS`** (app default **120**, max **600**) so first deploy can finish downloading **MiniLM** + opening Chroma on Railway.

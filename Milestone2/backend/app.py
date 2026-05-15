@@ -224,6 +224,18 @@ _rag_init_attempted: bool = False
 _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
 _rag_init_timed_out: bool = False
+# True after a POST /query ends in degraded fallback, timeout, or handler error (until a successful pipeline run).
+_last_query_pipeline_degraded: bool = False
+
+
+def _record_last_query_status(status: str) -> None:
+    """Align /health `degraded` with real /query outcomes (not only RAG init)."""
+    global _last_query_pipeline_degraded
+    s = (status or "").strip().lower()
+    if s in ("success", "refusal", "no_results"):
+        _last_query_pipeline_degraded = False
+    elif s in ("degraded", "timeout", "error"):
+        _last_query_pipeline_degraded = True
 
 
 class QueryRequest(BaseModel):
@@ -262,7 +274,10 @@ class HealthResponse(BaseModel):
     )
     chroma_loaded: bool = Field(default=False)
     mock_mode: bool = Field(default=True)
-    degraded: bool = Field(default=False)
+    degraded: bool = Field(
+        default=False,
+        description="True if RAG init failed/timed out OR the last POST /query ended in error/timeout/degraded fallback.",
+    )
     index_on_disk: bool = Field(
         default=False,
         description="True if chroma.sqlite3 exists at resolved INDEXED_DATA_PATH.",
@@ -543,11 +558,18 @@ def _run_query_sync(query: str) -> Dict[str, Any]:
 def _build_health_response() -> HealthResponse:
     mock_mode = not _has_groq_key()
     rag_available = rag_orchestrator is not None
-    degraded = not rag_available and (_degraded_no_rag or _rag_init_timed_out)
+    rag_init_degraded = not rag_available and (_degraded_no_rag or _rag_init_timed_out)
+    degraded = rag_init_degraded or _last_query_pipeline_degraded
     index_on_disk = _chroma_index_on_disk()
 
     if rag_available:
-        msg = "Full RAG available"
+        if _last_query_pipeline_degraded:
+            msg = (
+                "RAG is initialized, but the last POST /query failed (timeout, error, or degraded fallback). "
+                "Check logs for answer_query / Groq / retrieval. A successful query clears this state."
+            )
+        else:
+            msg = "Full RAG available"
         if mock_mode:
             msg += " · LLM in demo mode (set GROQ_API_KEY for Groq)"
     elif _rag_init_timed_out:
@@ -678,7 +700,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.9",
+    version="2.2.10",
     lifespan=lifespan,
 )
 
@@ -730,27 +752,35 @@ async def query_fund(request: Request, body: QueryRequest):
     query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 90.0), 300.0))
     combined_ceiling = min(600.0, init_timeout + query_timeout_s + 30.0)
 
-    logger.info("POST /query — begin RAG lazy init if needed, then answer (combined ceiling ~%.0fs)", combined_ceiling)
+    logger.info(
+        "POST /query — RAG lazy init + answer (single wall timeout ~%.0fs; QUERY_TIMEOUT_SECONDS=%.0fs advisory)",
+        combined_ceiling,
+        query_timeout_s,
+    )
 
     try:
         async with asyncio.timeout(combined_ceiling):
             await ensure_rag_engine_async(request)
-            async with asyncio.timeout(query_timeout_s):
-                response = await asyncio.to_thread(_run_query_sync, q)
-        return QueryResponse(
+            response = await asyncio.to_thread(_run_query_sync, q)
+        st = response.get("status", "error")
+        out = QueryResponse(
             answer=response.get("answer", "") or "No answer returned.",
             source=response.get("source"),
             source_link=response.get("source_link"),
             last_updated=response.get("last_updated"),
-            status=response.get("status", "error"),
+            status=st if isinstance(st, str) else "error",
         )
+        _record_last_query_status(out.status)
+        return out
     except TimeoutError:
         logger.warning("POST /query timed out (combined init+answer ceiling ~%.0fs)", combined_ceiling)
         fb = _fallback_query_response(q, reason="query_timeout")
+        _record_last_query_status("timeout")
         return QueryResponse(answer=fb["answer"], status="timeout")
     except Exception:
         logger.exception("Query failed")
         fb = _fallback_query_response(q, reason="query_failed")
+        _record_last_query_status("error")
         return QueryResponse(answer=fb["answer"], status="error")
 
 
