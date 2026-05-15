@@ -11,6 +11,7 @@ import asyncio
 import gc
 import json
 import logging
+import math
 import os
 import sys
 import traceback
@@ -212,10 +213,10 @@ def _memory_mb() -> Optional[float]:
         return None
 
 
-# ---------------------------------------------------------------------------
-# Runtime state (lazy RAG + degradation)
-# ---------------------------------------------------------------------------
-rag_orchestrator: Any = None
+# Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
+APP_VERSION = "2.2.11"
+
+# --- Runtime state (lazy RAG + degradation) ---
 _schemes: List[str] = []
 _chroma_loaded: bool = False
 _model_loaded: bool = False
@@ -226,15 +227,34 @@ _degraded_no_rag: bool = False
 _rag_init_timed_out: bool = False
 # True after a POST /query ends in degraded fallback, timeout, or handler error (until a successful pipeline run).
 _last_query_pipeline_degraded: bool = False
+# Last completed POST /query status (normalized lower-case), for /health transparency.
+_last_query_status_report: Optional[str] = None
+
+
+def _safe_memory_mb() -> Optional[float]:
+    """RSS in MB; never NaN/Inf (invalid in strict JSON)."""
+    m = _memory_mb()
+    if m is None:
+        return None
+    try:
+        if math.isnan(m) or math.isinf(m):
+            return None
+        return round(float(m), 2)
+    except (TypeError, ValueError):
+        return None
 
 
 def _record_last_query_status(status: str) -> None:
     """Align /health `degraded` with real /query outcomes (not only RAG init)."""
-    global _last_query_pipeline_degraded
+    global _last_query_pipeline_degraded, _last_query_status_report
     s = (status or "").strip().lower()
+    _last_query_status_report = s if s else "error"
     if s in ("success", "refusal", "no_results"):
         _last_query_pipeline_degraded = False
     elif s in ("degraded", "timeout", "error"):
+        _last_query_pipeline_degraded = True
+    else:
+        logger.warning("Unknown POST /query status %r — marking query pipeline degraded for /health", status)
         _last_query_pipeline_degraded = True
 
 
@@ -281,6 +301,14 @@ class HealthResponse(BaseModel):
     index_on_disk: bool = Field(
         default=False,
         description="True if chroma.sqlite3 exists at resolved INDEXED_DATA_PATH.",
+    )
+    api_version: str = Field(
+        default=APP_VERSION,
+        description="Backend build version string (same family as OpenAPI /version).",
+    )
+    last_query_status: Optional[str] = Field(
+        default=None,
+        description="Normalized status of the last completed POST /query on this worker (null if none yet).",
     )
 
 
@@ -600,12 +628,14 @@ def _build_health_response() -> HealthResponse:
         rag_ready=_retrieval_warmed,
         message=msg,
         schemes_loaded=len(_schemes),
-        memory_mb=_memory_mb(),
+        memory_mb=_safe_memory_mb(),
         model_loaded=_model_loaded,
         chroma_loaded=_chroma_loaded,
         mock_mode=mock_mode,
         degraded=degraded,
         index_on_disk=index_on_disk,
+        api_version=APP_VERSION,
+        last_query_status=_last_query_status_report,
     )
 
 
@@ -627,6 +657,8 @@ def _health_safe() -> HealthResponse:
             mock_mode=not _has_groq_key(),
             degraded=True,
             index_on_disk=_chroma_index_on_disk(),
+            api_version=APP_VERSION,
+            last_query_status=None,
         )
 
 
@@ -700,7 +732,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.10",
+    version="2.2.11",
     lifespan=lifespan,
 )
 

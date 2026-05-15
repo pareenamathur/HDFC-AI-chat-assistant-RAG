@@ -108,6 +108,10 @@ export type HealthResponse = {
   mock_mode?: boolean;
   degraded?: boolean;
   index_on_disk?: boolean;
+  /** Backend build (e.g. 2.2.11); use to confirm deploy matches Git. */
+  api_version?: string;
+  /** Last POST /query terminal status on this worker, or null if none yet. */
+  last_query_status?: string | null;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {
