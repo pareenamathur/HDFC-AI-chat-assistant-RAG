@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from typing import List, Dict, Any, Optional
-from llm_client import LLMProvider
+from llm_client import LLMProvider, LLMError, classify_llm_failure
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +11,13 @@ class AnswerGenerator:
 
     def __init__(self, llm_provider: LLMProvider):
         self.llm = llm_provider
+        provider_name = type(llm_provider).__name__
+        model = getattr(llm_provider, "model", None)
+        logger.info(
+            "AnswerGenerator init provider=%s model=%s",
+            provider_name,
+            model or "(n/a)",
+        )
 
     def generate_answer(self, query: str, context: str, multi_fund: bool = False) -> str:
         """
@@ -35,16 +42,36 @@ class AnswerGenerator:
 
         ctx_n = len(ctx)
         logger.info(
-            "AnswerGenerator: LLM call starting context_chars=%s multi_fund=%s",
+            "AnswerGenerator: LLM call starting provider=%s context_chars=%s query_chars=%s multi_fund=%s",
+            type(self.llm).__name__,
             ctx_n,
+            len((query or "").strip()),
             multi_fund,
         )
         t0 = time.perf_counter()
-        out = self.llm.generate(system_prompt, user_prompt)
+        try:
+            out = self.llm.generate(system_prompt, user_prompt)
+        except Exception as e:
+            cat, code = classify_llm_failure(e)
+            logger.error(
+                "AnswerGenerator: LLM call FAILED ms=%.1f category=%s http_status=%s err_type=%s",
+                (time.perf_counter() - t0) * 1000,
+                cat,
+                code,
+                type(e).__name__,
+            )
+            if isinstance(e, LLMError):
+                raise
+            raise LLMError(
+                f"LLM generate failed ({cat}): {str(e)[:300]}",
+                category=cat,
+                status_code=code,
+            ) from e
         logger.info(
-            "AnswerGenerator: LLM call finished ms=%.1f answer_chars=%s",
+            "AnswerGenerator: LLM call finished ms=%.1f answer_chars=%s preview=%r",
             (time.perf_counter() - t0) * 1000,
             len(out or ""),
+            (out or "")[:160],
         )
         return out
 

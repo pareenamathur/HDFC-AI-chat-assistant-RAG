@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.22"
+APP_VERSION = "2.2.23"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -780,32 +780,58 @@ async def ensure_rag_engine_async(request: Request) -> None:
     await ensure_rag_engine_async_from_app(request.app)
 
 
-def _log_query_env_diagnostics() -> None:
-    """Log non-secret env readiness for /query debugging (Railway)."""
+def _log_llm_env_diagnostics(prefix: str = "LLM env") -> None:
+    """Non-secret LLM configuration (Railway debugging)."""
     groq = _has_groq_key()
+    openai = bool((_str_env("OPENAI_API_KEY", "")).strip())
+    key = (_str_env("GROQ_API_KEY", "")).strip()
+    key_hint = f"len={len(key)} prefix={key[:4]}…" if key else "missing"
     logger.info(
-        "POST /query env — groq_key_present=%s GROQ_MODEL=%s LLM_TIMEOUT_SECONDS=%s "
-        "LLM_MAX_RETRIES=%s VECTOR_FETCH_K=%s QUERY_TIMEOUT_SECONDS=%s",
+        "%s — groq_key_present=%s (%s) openai_key_present=%s (unused) "
+        "GROQ_MODEL=%s LLM_TIMEOUT_SECONDS=%s LLM_MAX_RETRIES=%s LLM_MAX_TOKENS=%s "
+        "LLM_QUERY_BUDGET_SECONDS=%s QUERY_TIMEOUT_SECONDS=%s",
+        prefix,
         groq,
+        key_hint,
+        openai,
         _str_env("GROQ_MODEL", "llama-3.1-8b-instant") or "(default)",
-        _float_env("LLM_TIMEOUT_SECONDS", 60.0),
+        _float_env("LLM_TIMEOUT_SECONDS", 75.0),
         _int_env("LLM_MAX_RETRIES", 2, 0, 4),
-        _vector_fetch_k(),
-        _float_env("QUERY_TIMEOUT_SECONDS", 90.0),
+        _int_env("LLM_MAX_TOKENS", 512, 64, 2048),
+        _float_env("LLM_QUERY_BUDGET_SECONDS", 90.0),
+        _float_env("QUERY_TIMEOUT_SECONDS", 120.0),
     )
+    if openai and not groq:
+        logger.warning(
+            "OPENAI_API_KEY is set but GROQ_API_KEY is missing — this stack uses Groq only."
+        )
     if not groq:
         logger.warning(
-            "GROQ_API_KEY is not set — answers use MockLLM (limited). Set GROQ_API_KEY on Railway."
+            "GROQ_API_KEY is not set — answers use MockLLM until the key is configured on Railway."
         )
 
 
+def _log_query_env_diagnostics() -> None:
+    """Log non-secret env readiness for /query debugging (Railway)."""
+    _log_llm_env_diagnostics("POST /query env")
+    logger.info(
+        "POST /query env — VECTOR_FETCH_K=%s combined_wall_timeout=%.0fs",
+        _vector_fetch_k(),
+        _query_combined_timeout_seconds(),
+    )
+
+
 def _query_combined_timeout_seconds() -> float:
-    """Wall clock for init (if needed) + answer; skip full init budget when RAG already up."""
+    """
+    Wall clock for init + embed + full answer_query (retrieval + Groq).
+    Retrieval and LLM each get separate budgets so slow Chroma does not starve the LLM.
+    """
     init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
-    query_timeout_s = max(5.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 120.0), 300.0))
+    retrieval_budget = max(10.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 120.0), 300.0))
+    llm_budget = max(20.0, min(_float_env("LLM_QUERY_BUDGET_SECONDS", 90.0), 180.0))
     init_budget = 3.0 if rag_orchestrator is not None else init_timeout
     embed_budget = 0.0 if _retrieval_warmed else min(90.0, _float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 90.0))
-    return min(600.0, init_budget + embed_budget + query_timeout_s + 25.0)
+    return min(600.0, init_budget + embed_budget + retrieval_budget + llm_budget + 20.0)
 
 
 async def _warm_retrieval_if_needed() -> None:
@@ -1013,6 +1039,7 @@ async def lifespan(app: FastAPI):
         _schemes = []
 
     mem = _memory_mb()
+    _log_llm_env_diagnostics("Startup LLM env")
     logger.info(
         "Startup complete — routes live | pid=%s | schemes=%s RAM=%.1f MB | "
         "mock_mode on /health = not groq_key_present.",

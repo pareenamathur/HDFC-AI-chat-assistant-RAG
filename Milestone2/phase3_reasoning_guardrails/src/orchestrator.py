@@ -19,6 +19,7 @@ from query_processor import QueryProcessor
 from retriever import HybridRetriever
 from context_builder import ContextBuilder
 from answer_sanitizer import sanitize_answer_text, resolve_source_fields
+from llm_client import MockLLM, classify_llm_failure
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,19 @@ class RAGOrchestrator:
 
     def _get_generator(self):
         """Lazy LLM + AnswerGenerator so startup stays lightweight."""
+        import gc
+        from answer_generator import AnswerGenerator
+        from llm_client import get_llm_provider, _groq_api_key
+
         if self._generator is None:
-            import gc
-            from answer_generator import AnswerGenerator
-            from llm_client import get_llm_provider
+            self._generator = AnswerGenerator(get_llm_provider())
+            gc.collect()
+            return self._generator
+
+        if isinstance(self._generator.llm, MockLLM) and _groq_api_key():
+            logger.warning(
+                "Recreating AnswerGenerator — GROQ_API_KEY is now set (was MockLLM)."
+            )
             self._generator = AnswerGenerator(get_llm_provider())
             gc.collect()
         return self._generator
@@ -88,19 +98,26 @@ class RAGOrchestrator:
         return "\n\n".join(parts) if parts else "No relevant context found."
 
     def _retrieval_fallback_answer(
-        self, query: str, results: List[Dict[str, Any]]
+        self,
+        query: str,
+        results: List[Dict[str, Any]],
+        *,
+        llm_reason: str = "unavailable",
     ) -> Dict[str, Any]:
-        """Deterministic answer from top chunks when the LLM path fails (keeps status=success)."""
-        parts: List[str] = []
+        """Structured excerpt summary when Groq/LLM fails (status=degraded)."""
+        bullets: List[str] = []
         for res in results[:3]:
             meta = res.get("metadata") or {}
-            scheme = meta.get("scheme_name") or "HDFC fund"
+            scheme = (meta.get("scheme_name") or "HDFC fund").strip()
             text = (res.get("text") or "").strip().replace("\n", " ")
             if not text:
                 continue
-            snippet = text[:320] + ("…" if len(text) > 320 else "")
-            parts.append(f"{scheme}: {snippet}")
-        if not parts:
+            snippet = text[:220].strip()
+            if len(text) > 220:
+                snippet += "…"
+            bullets.append(f"• {scheme}: {snippet}")
+
+        if not bullets:
             return {
                 "answer": "I found related records but could not format an answer. Please try a more specific fund name.",
                 "source": None,
@@ -109,14 +126,21 @@ class RAGOrchestrator:
                 "sources": [],
                 "status": "no_results",
             }
-        body = " ".join(parts[:2])
-        if len(parts) > 2:
-            body += " Additional matching funds are in the indexed corpus."
-        note = (
-            " (Answer synthesized from retrieved corpus excerpts; the LLM step was unavailable. "
-            "Retry shortly for a fuller summary.)"
-        )
-        return self._apply_policy(f"{body}{note}", results)
+
+        intro = "I could not run the AI summarizer right now, so here are the most relevant facts from the fund corpus:"
+        if llm_reason == "auth":
+            foot = "Set a valid GROQ_API_KEY on Railway and retry."
+        elif llm_reason == "timeout":
+            foot = "The AI step timed out — please try again in a moment."
+        elif llm_reason == "rate_limit":
+            foot = "The AI service is rate-limited — please retry shortly."
+        else:
+            foot = "Please retry shortly for a full AI-written answer."
+
+        body = intro + "\n\n" + "\n\n".join(bullets) + "\n\n" + foot
+        out = self._apply_policy(body, results)
+        out["status"] = "degraded"
+        return out
 
     def _log_chunk_preview(self, results: List[Dict[str, Any]], max_chars: int = 180) -> None:
         if not results:
@@ -270,24 +294,27 @@ class RAGOrchestrator:
         try:
             raw_answer = self._get_generator().generate_answer(q, context, multi_fund=is_multi)
         except Exception as e:
-            logger.exception(
-                "answer_query STAGE=llm_generate FAILED after_ms=%.1f err=%s context_chars=%s — using retrieval fallback",
+            cat, code = classify_llm_failure(e)
+            logger.error(
+                "answer_query STAGE=llm_generate FAILED after_ms=%.1f category=%s http_status=%s "
+                "err_type=%s context_chars=%s — retrieval fallback",
                 (time.perf_counter() - t0) * 1000,
+                cat,
+                code,
                 type(e).__name__,
                 ctx_len,
             )
-            return self._retrieval_fallback_answer(q, all_results)
+            return self._retrieval_fallback_answer(q, all_results, llm_reason=cat)
 
         if not isinstance(raw_answer, str):
             logger.warning("answer_query STAGE=llm_generate non-string answer — retrieval fallback")
-            return self._retrieval_fallback_answer(q, all_results)
+            return self._retrieval_fallback_answer(q, all_results, llm_reason="empty_response")
 
-        if not raw_answer.strip() or "timed out" in raw_answer.lower():
+        if not raw_answer.strip():
             logger.warning(
-                "answer_query STAGE=llm_generate empty/timeout text — retrieval fallback preview=%r",
-                raw_answer[:120],
+                "answer_query STAGE=llm_generate empty string — retrieval fallback",
             )
-            return self._retrieval_fallback_answer(q, all_results)
+            return self._retrieval_fallback_answer(q, all_results, llm_reason="empty_response")
 
         ans_preview = raw_answer[:200]
         logger.info(
@@ -306,7 +333,7 @@ class RAGOrchestrator:
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
             )
-            return self._retrieval_fallback_answer(q, all_results)
+            return self._retrieval_fallback_answer(q, all_results, llm_reason="policy_error")
 
         logger.info(
             "answer_query STAGE=apply_policy OK ms=%.1f final_status=%s total_ms=%.1f",
