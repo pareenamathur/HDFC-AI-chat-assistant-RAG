@@ -426,7 +426,9 @@ export default function Home() {
                                       className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant transition hover:border-primary"
                                     >
                                       <MsIcon name="link" className="shrink-0 text-[14px]" />
-                                      <span className="truncate">{message.source || 'Source'}</span>
+                                      <span className="truncate">
+                                        {message.source || 'HDFC Mutual Fund'}
+                                      </span>
                                     </a>
                                   )}
                                   {!message.source_link && message.source && (

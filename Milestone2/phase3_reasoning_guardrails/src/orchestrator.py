@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
 from query_processor import QueryProcessor
 from retriever import HybridRetriever
 from context_builder import ContextBuilder
+from answer_sanitizer import sanitize_answer_text, resolve_source_fields
 
 logger = logging.getLogger(__name__)
 
@@ -260,49 +261,12 @@ class RAGOrchestrator:
         refusal_keywords = ["don't know", "do not have enough information", "not found", "cannot answer"]
         is_refusal = any(kw in answer.lower() for kw in refusal_keywords)
 
-        # Strip ALL URLs from the answer to prevent broken links
-        clean_answer = re.sub(r'https?://\S+', '', answer).strip()
-        
-        # Extract source information from chunk metadata
-        source_info = None
-        source_link = None
-        last_updated = None
-        
-        if results and len(results) > 0:
-            # Get the top result's metadata
-            top_result = results[0]
-            metadata = top_result.get("metadata", {})
-            if not isinstance(metadata, dict):
-                metadata = {}
-            
-            # Extract source information
-            scheme_name = metadata.get("scheme_name", "Unknown Scheme")
-            source_url = metadata.get("source_url", "")
-            official = "https://www.hdfcfund.com/"
+        clean_answer = sanitize_answer_text(answer)
 
-            # Metadata usually stores HTML basenames — still expose a valid official URL
-            if source_url and not source_url.startswith("http"):
-                source_info = scheme_name
-                source_link = official
-            elif source_url and source_url.startswith("http"):
-                source_info = scheme_name
-                source_link = source_url
-            else:
-                source_info = scheme_name
-                source_link = official
-
-            lud = metadata.get("last_updated_date") or metadata.get("created_at", "")
-            if lud:
-                try:
-                    from datetime import datetime
-
-                    if isinstance(lud, str) and len(lud) >= 10 and lud[4] == "-" and lud[7] == "-":
-                        last_updated = lud[:10]
-                    else:
-                        dt = datetime.fromisoformat(str(lud).replace("Z", "+00:00"))
-                        last_updated = dt.strftime("%Y-%m-%d")
-                except Exception:
-                    last_updated = None
+        src = resolve_source_fields(results)
+        source_info = src.get("source")
+        source_link = src.get("source_link")
+        last_updated = src.get("last_updated")
 
         # Apply user constraint: If we don't know, no source info.
         if is_refusal:

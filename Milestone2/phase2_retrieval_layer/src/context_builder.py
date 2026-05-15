@@ -7,9 +7,21 @@ logger = logging.getLogger(__name__)
 OFFICIAL_HDFC_CITATION_URL = "https://www.hdfcfund.com/"
 
 
-def _format_source_header(global_idx: int, meta: Dict[str, Any]) -> str:
+def _nav_as_of_from_text(text: str) -> str | None:
+    import re
+
+    m = re.search(r"NAV:\s*(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2})\b", text or "", re.I)
+    if not m:
+        return None
+    return f"{m.group(1)} {m.group(2)} {m.group(3)}"
+
+
+def _format_source_header(global_idx: int, meta: Dict[str, Any], text: str = "") -> str:
     raw = (meta.get("source_url") or "").strip()
     updated = meta.get("last_updated_date") or meta.get("created_at") or "Unknown"
+    nav_as_of = _nav_as_of_from_text(text)
+    if nav_as_of:
+        updated = nav_as_of
     if raw.startswith("http://") or raw.startswith("https://"):
         return f"[Source {global_idx}]: {raw} (Updated: {updated})\n"
     snap = f" local_snapshot_file={raw}" if raw else ""
@@ -80,7 +92,7 @@ class ContextBuilder:
                             f"{field.replace('_', ' ').title()}: {str(meta[field])}"
                         )
 
-                block = _format_source_header(global_idx, meta)
+                block = _format_source_header(global_idx, meta, text)
                 if structured_info:
                     block += "Factual Highlights: " + " | ".join(set(structured_info)) + "\n"
                 block += f"Content: {text.strip()}"

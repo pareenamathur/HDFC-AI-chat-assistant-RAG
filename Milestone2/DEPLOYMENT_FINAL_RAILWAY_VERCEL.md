@@ -42,8 +42,10 @@ Bounded RAG init: set **`RAG_INIT_TIMEOUT_SECONDS`** (app default **120**, max *
 The **FastAPI service does not refresh NAV on a timer.** Replies come from **`data/indexed/`** (last scrape + Chroma build you shipped).
 
 - **`data/corpus_version.json`** — field **`last_updated`** records the last pipeline refresh you committed.
-- **GitHub Actions:** `.github/workflows/corpus-health-check.yml` runs **daily** on the **default branch** (`cron: 30 4 * * *`), on **push** to `main`/`master` when `data/corpus_version.json` or this workflow changes, and on **workflow_dispatch**. It fails if `last_updated` is older than **`STALE_THRESHOLD_DAYS`** (set at the top of the workflow file, default **30**). Repo → **Settings → Actions → General**: allow **Actions** (and for forks, default workflow permissions). Then **Actions** tab → confirm runs.
-- **Newer NAV:** re-run Phase **1.1–1.4** (fetch → chunk), then **`python scripts/rebuild_chroma_from_chunks.py --force`**, commit **`data/processed/`** + **`data/indexed/`**, redeploy.
+- **GitHub Actions — health:** `.github/workflows/corpus-health-check.yml` runs **daily** and fails if `data/corpus_version.json` is older than **30 days** (alert only).
+- **GitHub Actions — refresh:** `.github/workflows/corpus-refresh.yml` runs **monthly** (`cron: 30 4 1 * *`) and on **workflow_dispatch** — runs **`python scripts/run_corpus_refresh.py`** (fetch → extract → chunk → Chroma rebuild), then **commits** `data/` to `main`. **Actions → Corpus refresh → Run workflow** to update NAV now.
+- **Local refresh:** `python scripts/run_corpus_refresh.py` (or `--skip-fetch` if HTML already in `data/html/`).
+- **Newer NAV on Railway:** after refresh commits land on `main`, redeploy (or wait for auto-deploy).
 
 **Source links:** Chroma metadata often stores only an HTML **basename**. The RAG context now includes **`Official citation URL: https://www.hdfcfund.com/`**, and **`POST /query`** responses set **`source_link`** to that URL when no `https` source is stored — so the UI/API always get a valid official link.
 

@@ -214,7 +214,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.13"
+APP_VERSION = "2.2.14"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -733,7 +733,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.13",
+    version="2.2.14",
     lifespan=lifespan,
 )
 
