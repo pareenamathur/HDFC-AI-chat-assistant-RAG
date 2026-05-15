@@ -43,7 +43,8 @@ The **FastAPI service does not refresh NAV on a timer.** Replies come from **`da
 
 - **`data/corpus_version.json`** — field **`last_updated`** records the last pipeline refresh you committed.
 - **GitHub Actions — health:** `.github/workflows/corpus-health-check.yml` runs **daily** and fails if `data/corpus_version.json` is older than **30 days** (alert only).
-- **GitHub Actions — refresh:** `.github/workflows/corpus-refresh.yml` runs **monthly** (`cron: 30 4 1 * *`) and on **workflow_dispatch** — runs **`python scripts/run_corpus_refresh.py`** (fetch → extract → chunk → Chroma rebuild), then **commits** `data/` to `main`. **Actions → Corpus refresh → Run workflow** to update NAV now.
+- **GitHub Actions — refresh:** use workflow **Corpus refresh** at the **repository root** (`.github/workflows/corpus-refresh.yml` on `main`, **not** only under `Milestone2/.github/`). It runs **`python scripts/run_corpus_refresh.py`** (fetch → chunk → **MiniLM** Chroma), then commits **`Milestone2/data/`**. After a green run: **`git pull`**, then **redeploy Railway**.
+- **Verify locally:** `python scripts/post_refresh_check.py`
 - **Local refresh:** `python scripts/run_corpus_refresh.py` (or `--skip-fetch` if HTML already in `data/html/`).
 - **Newer NAV on Railway:** after refresh commits land on `main`, redeploy (or wait for auto-deploy).
 
