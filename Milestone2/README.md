@@ -114,11 +114,11 @@ User: What is the expense ratio for HDFC Flexi Cap Fund?
 
 | Resource | URL |
 |----------|-----|
-| **Live frontend** | `https://your-app.vercel.app` *(replace with your Vercel deployment)* |
-| **Backend API** | `https://your-app.up.railway.app` *(replace with your Railway service)* |
-| **GitHub repository** | `https://github.com/pareenamathur/milestone2_hdfc` |
+| **Live frontend** | [https://milestone2-hdfc-rdb43q34e-pareenamathurs-projects.vercel.app](https://milestone2-hdfc-rdb43q34e-pareenamathurs-projects.vercel.app) |
+| **Backend API** | [https://milestone2hdfc-production.up.railway.app](https://milestone2hdfc-production.up.railway.app) |
+| **GitHub repository** | [https://github.com/pareenamathur/milestone2_hdfc](https://github.com/pareenamathur/milestone2_hdfc) |
 
-**Health check:** `GET /health` on the API — returns `ready`, `rag_available`, `rag_ready`, corpus timestamps, and `api_version`.
+**Health check:** [https://milestone2hdfc-production.up.railway.app/health](https://milestone2hdfc-production.up.railway.app/health) — returns `ready`, `rag_available`, `rag_ready`, corpus timestamps, and `api_version`.
 
 ---
 
