@@ -29,7 +29,7 @@ class AnswerGenerator:
             multi_fund: Whether multiple funds are being discussed.
         """
         system_prompt = self._get_system_prompt(multi_fund)
-        max_ctx = int(os.getenv("LLM_MAX_CONTEXT_CHARS", "12000"))
+        max_ctx = int(os.getenv("LLM_MAX_CONTEXT_CHARS", "8000"))
         ctx = (context or "").strip()
         if len(ctx) > max_ctx:
             logger.warning(

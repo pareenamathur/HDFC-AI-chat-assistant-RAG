@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.23"
+APP_VERSION = "2.2.24"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None

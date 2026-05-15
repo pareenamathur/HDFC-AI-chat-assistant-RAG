@@ -19,7 +19,13 @@ from query_processor import QueryProcessor
 from retriever import HybridRetriever
 from context_builder import ContextBuilder
 from answer_sanitizer import sanitize_answer_text, resolve_source_fields
-from llm_client import MockLLM, classify_llm_failure
+from llm_client import MockLLM, classify_llm_failure, _groq_api_key
+from extractive_fallback import (
+    build_compact_llm_context,
+    build_extractive_answer,
+    _group_by_scheme,
+    _merge_facts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,44 +109,53 @@ class RAGOrchestrator:
         results: List[Dict[str, Any]],
         *,
         llm_reason: str = "unavailable",
+        intent: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Structured excerpt summary when Groq/LLM fails (status=degraded)."""
-        bullets: List[str] = []
-        for res in results[:3]:
-            meta = res.get("metadata") or {}
-            scheme = (meta.get("scheme_name") or "HDFC fund").strip()
-            text = (res.get("text") or "").strip().replace("\n", " ")
-            if not text:
-                continue
-            snippet = text[:220].strip()
-            if len(text) > 220:
-                snippet += "…"
-            bullets.append(f"• {scheme}: {snippet}")
+        """Clean fact-based answer when Groq fails — no raw HTML chunk dumps."""
+        extracted = build_extractive_answer(query, results, intent=intent)
+        if extracted:
+            if llm_reason == "auth":
+                suffix = " Configure GROQ_API_KEY on Railway for AI-written summaries."
+            elif llm_reason in ("timeout", "rate_limit"):
+                suffix = ""
+            else:
+                suffix = ""
+            body = extracted + suffix
+            out = self._apply_policy(body, results)
+            out["status"] = "success"
+            logger.info(
+                "answer_query: extractive fallback OK (llm_reason=%s) chars=%s",
+                llm_reason,
+                len(body),
+            )
+            return out
 
-        if not bullets:
-            return {
-                "answer": "I found related records but could not format an answer. Please try a more specific fund name.",
-                "source": None,
-                "source_link": None,
-                "last_updated": None,
-                "sources": [],
-                "status": "no_results",
-            }
+        lines: List[str] = []
+        for scheme, chunks in _group_by_scheme(results)[:2]:
+            facts = _merge_facts(chunks)
+            short = scheme.replace(" Direct Growth", "")
+            if facts.get("nav"):
+                lines.append(f"{short}: latest NAV {facts['nav']}.")
+            elif facts.get("expense_ratio"):
+                lines.append(f"{short}: expense ratio {facts['expense_ratio']}.")
 
-        intro = "I could not run the AI summarizer right now, so here are the most relevant facts from the fund corpus:"
-        if llm_reason == "auth":
-            foot = "Set a valid GROQ_API_KEY on Railway and retry."
-        elif llm_reason == "timeout":
-            foot = "The AI step timed out — please try again in a moment."
-        elif llm_reason == "rate_limit":
-            foot = "The AI service is rate-limited — please retry shortly."
-        else:
-            foot = "Please retry shortly for a full AI-written answer."
+        if lines:
+            body = " ".join(lines)
+            out = self._apply_policy(body, results)
+            out["status"] = "success"
+            return out
 
-        body = intro + "\n\n" + "\n\n".join(bullets) + "\n\n" + foot
-        out = self._apply_policy(body, results)
-        out["status"] = "degraded"
-        return out
+        return {
+            "answer": (
+                "I found fund records but could not summarize them right now. "
+                "Please try again in a moment or ask a more specific question (e.g. NAV or expense ratio)."
+            ),
+            "source": None,
+            "source_link": "https://www.hdfcfund.com/",
+            "last_updated": None,
+            "sources": [],
+            "status": "degraded",
+        }
 
     def _log_chunk_preview(self, results: List[Dict[str, Any]], max_chars: int = 180) -> None:
         if not results:
@@ -289,32 +304,49 @@ class RAGOrchestrator:
             logger.warning("answer_query: context empty or placeholder despite chunk_count=%s", len(all_results))
 
         # --- Stage: llm_generate ---
+        compact_ctx = build_compact_llm_context(all_results, intent=intent, query=q)
+        ctx_for_llm = compact_ctx if len(compact_ctx) > 80 else context
+        logger.info(
+            "answer_query STAGE=llm_context compact_chars=%s full_chars=%s using=%s",
+            len(compact_ctx),
+            ctx_len,
+            "compact" if ctx_for_llm == compact_ctx else "full",
+        )
+
         t0 = time.perf_counter()
         raw_answer: str = ""
+        if _groq_api_key():
+            self._generator = None
         try:
-            raw_answer = self._get_generator().generate_answer(q, context, multi_fund=is_multi)
+            raw_answer = self._get_generator().generate_answer(
+                q, ctx_for_llm, multi_fund=is_multi
+            )
         except Exception as e:
             cat, code = classify_llm_failure(e)
             logger.error(
                 "answer_query STAGE=llm_generate FAILED after_ms=%.1f category=%s http_status=%s "
-                "err_type=%s context_chars=%s — retrieval fallback",
+                "err_type=%s context_chars=%s — extractive fallback",
                 (time.perf_counter() - t0) * 1000,
                 cat,
                 code,
                 type(e).__name__,
-                ctx_len,
+                len(ctx_for_llm),
             )
-            return self._retrieval_fallback_answer(q, all_results, llm_reason=cat)
+            return self._retrieval_fallback_answer(
+                q, all_results, llm_reason=cat, intent=intent
+            )
 
         if not isinstance(raw_answer, str):
-            logger.warning("answer_query STAGE=llm_generate non-string answer — retrieval fallback")
-            return self._retrieval_fallback_answer(q, all_results, llm_reason="empty_response")
+            logger.warning("answer_query STAGE=llm_generate non-string answer — extractive fallback")
+            return self._retrieval_fallback_answer(
+                q, all_results, llm_reason="empty_response", intent=intent
+            )
 
         if not raw_answer.strip():
-            logger.warning(
-                "answer_query STAGE=llm_generate empty string — retrieval fallback",
+            logger.warning("answer_query STAGE=llm_generate empty string — extractive fallback")
+            return self._retrieval_fallback_answer(
+                q, all_results, llm_reason="empty_response", intent=intent
             )
-            return self._retrieval_fallback_answer(q, all_results, llm_reason="empty_response")
 
         ans_preview = raw_answer[:200]
         logger.info(
@@ -333,7 +365,9 @@ class RAGOrchestrator:
                 (time.perf_counter() - t0) * 1000,
                 type(e).__name__,
             )
-            return self._retrieval_fallback_answer(q, all_results, llm_reason="policy_error")
+            return self._retrieval_fallback_answer(
+                q, all_results, llm_reason="policy_error", intent=intent
+            )
 
         logger.info(
             "answer_query STAGE=apply_policy OK ms=%.1f final_status=%s total_ms=%.1f",
