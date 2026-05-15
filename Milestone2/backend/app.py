@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.20"
+APP_VERSION = "2.2.21"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -332,6 +332,7 @@ _rag_init_attempt_count: int = 0
 _rag_init_error: Optional[str] = None
 _degraded_no_rag: bool = False
 _rag_init_timed_out: bool = False
+_rag_startup_attach_started: bool = False
 # True after a POST /query ends in degraded fallback, timeout, or handler error (until a successful pipeline run).
 _last_query_pipeline_degraded: bool = False
 # Last completed POST /query status (normalized lower-case), for /health transparency.
@@ -809,16 +810,23 @@ def _build_health_response() -> HealthResponse:
         if _rag_init_error:
             msg += f" ({_rag_init_error[:100]})"
     elif index_on_disk:
-        if _last_query_status_report is None:
+        if rag_orchestrator is None and _rag_startup_attach_started:
             msg = (
-                "API is up; Chroma index is on disk. RAG is lazy-loaded — send POST /query once to attach "
-                "the engine (first request may take 30–90s while MiniLM loads). /health alone does not load RAG."
+                "RAG startup attach in progress (Chroma + orchestrator). Retry /health in 20–40s. "
+                "First POST /query may still load MiniLM embeddings."
+            )
+        elif rag_orchestrator is None:
+            msg = (
+                "Chroma index on disk but RAG not attached yet. Startup attach may have failed — "
+                "check logs for OOM; use Railway >= 1 GB RAM, then POST /query or redeploy."
+            )
+        elif not _retrieval_warmed:
+            msg = (
+                "Chroma attached (rag_available). Embeddings load on first POST /query "
+                "(or set RAG_EMBEDDING_WARM=true for startup warm)."
             )
         else:
-            msg = (
-                "Chroma index on disk but RAG orchestrator not attached — check Railway logs for "
-                "RAG init / OOM. Ensure >= 1 GB RAM and retry POST /query."
-            )
+            msg = "Full RAG available"
         if mock_mode:
             msg += " mock_mode=true means GROQ_API_KEY is unset (LLM demo when RAG runs)."
     else:
@@ -923,30 +931,51 @@ async def lifespan(app: FastAPI):
         mem or -1,
     )
 
-    # Warm Chroma + orchestrator in the background so /health shows rag_available without
-    # requiring a synthetic first /query (Railway probes often only hit /health).
-    # Default off: loading Chroma + MiniLM at boot often OOM-kills small Railway plans (512MB–1GB).
-    warm = _bool_env("RAG_BACKGROUND_WARM", False)
-    if warm and _chroma_index_on_disk():
+    # Attach Chroma + orchestrator at startup (no MiniLM unless RAG_EMBEDDING_WARM=true).
+    # Default on so /health shows rag_available without waiting for first /query.
+    startup_attach = _bool_env("RAG_STARTUP_ATTACH", _bool_env("RAG_BACKGROUND_WARM", True))
+    legacy_warm = _bool_env("RAG_BACKGROUND_WARM", False)
+    embed_on_startup = _bool_env("RAG_EMBEDDING_WARM", legacy_warm)
 
-        async def _background_rag_warm() -> None:
+    if startup_attach and _chroma_index_on_disk():
+        global _rag_startup_attach_started
+        _rag_startup_attach_started = True
+
+        async def _startup_rag_attach() -> None:
+            global _retrieval_warmed, _model_loaded
             try:
-                logger.info("Background RAG warm task started (non-blocking).")
+                logger.info(
+                    "Startup RAG attach started (Chroma only; embed_on_startup=%s)",
+                    embed_on_startup,
+                )
                 await ensure_rag_engine_async_from_app(app)
-                if rag_orchestrator is not None:
-                    logger.info("Background RAG warm completed — orchestrator ready.")
-                else:
+                if rag_orchestrator is None:
                     logger.warning(
-                        "Background RAG warm finished without orchestrator (degraded=%s err=%s)",
-                        _degraded_no_rag,
+                        "Startup RAG attach finished without orchestrator err=%s",
                         (_rag_init_error or "")[:200],
                     )
+                    return
+                logger.info("Startup RAG attach OK — rag_available=true on /health")
+                if embed_on_startup:
+                    try:
+                        warm_timeout = max(
+                            30.0, min(_float_env("RAG_EMBED_WARM_TIMEOUT_SECONDS", 120.0), 300.0)
+                        )
+                        async with asyncio.timeout(warm_timeout):
+                            await asyncio.to_thread(rag_orchestrator.warm_retrieval_stack)
+                        _retrieval_warmed = True
+                        _model_loaded = True
+                        logger.info("Startup embedding warm OK — rag_ready=true on /health")
+                    except TimeoutError:
+                        logger.warning("Startup embedding warm timed out — will warm on first /query")
+                    except Exception:
+                        logger.exception("Startup embedding warm failed — will warm on first /query")
             except Exception:
-                logger.exception("Background RAG warm task failed")
+                logger.exception("Startup RAG attach task failed")
 
-        asyncio.create_task(_background_rag_warm())
-    elif warm and not _chroma_index_on_disk():
-        logger.info("RAG_BACKGROUND_WARM=true but no chroma.sqlite3 — skipping background warm.")
+        asyncio.create_task(_startup_rag_attach())
+    elif startup_attach:
+        logger.info("RAG_STARTUP_ATTACH=true but no chroma.sqlite3 — skipping startup attach")
 
     yield
     logger.info("HDFC MF API shutdown")
@@ -977,8 +1006,17 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check(request: Request):
     """Never raises; `ready` always true when this handler runs."""
+    if (
+        rag_orchestrator is None
+        and _chroma_index_on_disk()
+        and _bool_env("RAG_HEALTH_NUDGE_ATTACH", True)
+        and not _rag_startup_attach_started
+    ):
+        global _rag_startup_attach_started
+        _rag_startup_attach_started = True
+        asyncio.create_task(ensure_rag_engine_async_from_app(request.app))
     return _health_safe()
 
 
