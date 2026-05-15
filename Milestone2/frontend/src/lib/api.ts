@@ -167,17 +167,19 @@ function normalizeQueryResponse(data: unknown): QueryResponse {
   const d = data as Partial<QueryResponse> & { sources?: unknown };
   const answer =
     typeof d.answer === 'string' && d.answer.trim() ? d.answer : 'No answer field in response.';
-  const sources: SourceRef[] = Array.isArray(d.sources)
-    ? d.sources
-        .filter((s): s is Record<string, unknown> => s != null && typeof s === 'object')
-        .map((s) => ({
-          title: String(s.title || s.scheme_name || 'Source'),
-          url: String(s.url || ''),
-          scheme_name: s.scheme_name != null ? String(s.scheme_name) : undefined,
-          nav_as_of: s.nav_as_of != null ? String(s.nav_as_of) : undefined,
-        }))
-        .filter((s) => s.url.startsWith('http'))
-    : [];
+  const rawSources = Array.isArray(d.sources) ? (d.sources as unknown[]) : [];
+  const sources: SourceRef[] = rawSources
+    .filter((s) => s != null && typeof s === 'object')
+    .map((s) => {
+      const o = s as Record<string, unknown>;
+      return {
+        title: String(o.title || o.scheme_name || 'Source'),
+        url: String(o.url || ''),
+        scheme_name: o.scheme_name != null ? String(o.scheme_name) : undefined,
+        nav_as_of: o.nav_as_of != null ? String(o.nav_as_of) : undefined,
+      };
+    })
+    .filter((s) => s.url.startsWith('http'));
   return {
     answer,
     source: d.source,

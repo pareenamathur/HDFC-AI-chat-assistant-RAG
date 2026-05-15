@@ -8,6 +8,8 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'HDFC Assistant',
   description: 'Facts-only HDFC mutual fund assistant — corpus-backed, not investment advice.',
