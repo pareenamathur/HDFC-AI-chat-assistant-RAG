@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Groww HDFC Assistant',
+  title: 'HDFC Assistant',
   description: 'Facts-only HDFC mutual fund assistant — corpus-backed, not investment advice.',
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark h-full ${inter.variable}`}>
       <body
-        className={`${inter.className} flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-on-surface antialiased`}
+        className={`${inter.className} h-dvh max-h-dvh overflow-hidden bg-background text-text-primary antialiased`}
       >
         {children}
       </body>

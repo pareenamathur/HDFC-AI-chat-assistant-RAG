@@ -15,7 +15,10 @@ dist/
 downloads/
 eggs/
 .eggs/
+# Python virtualenv lib — do not ignore Next.js frontend/src/lib
 lib/
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/

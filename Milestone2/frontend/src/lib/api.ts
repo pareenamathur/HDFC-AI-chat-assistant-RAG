@@ -113,6 +113,8 @@ export type HealthResponse = {
   api_version?: string;
   /** Last POST /query terminal status on this worker, or null if none yet. */
   last_query_status?: string | null;
+  corpus_last_updated?: string;
+  nav_as_of_max?: string;
 };
 
 export async function fetchBackendHealth(): Promise<HealthResponse | null> {

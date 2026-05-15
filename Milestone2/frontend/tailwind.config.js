@@ -1,5 +1,4 @@
 /** @type {import('tailwindcss').Config} */
-/** Tokens aligned with stitch_groww_hdfc_ai_assistant (desktop + DESIGN.md) */
 module.exports = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,48 +8,42 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: '#0D0D0D',
-        surface: '#1C1C1E',
-        'surface-dim': '#131313',
-        'surface-container-lowest': '#0e0e0e',
-        'surface-container-low': '#151515',
-        'surface-container': '#201f1f',
-        'surface-container-high': '#2a2a2a',
-        'surface-container-highest': '#353534',
-        'on-surface': '#e5e2e1',
-        'on-surface-variant': '#A0A0A0',
-        'on-background': '#e5e2e1',
-        outline: '#2A2A2A',
-        'outline-variant': '#3c4a43',
-        primary: '#00D09C',
-        'on-primary': '#003828',
-        'primary-container': '#00d09c',
-        'on-primary-container': '#00533c',
-        secondary: '#ffb955',
-        disclaimer: '#F5A623',
-        error: '#ffb4ab',
-        'error-container': '#93000a',
+        background: '#0D1117',
+        sidebar: '#0B0F14',
+        card: '#111827',
+        border: '#1F2937',
+        'text-primary': '#E5E7EB',
+        'text-secondary': '#9CA3AF',
+        accent: '#10B981',
+        success: '#22C55E',
+        warning: '#F59E0B',
+        error: '#F87171',
+        'error-bg': '#1A0A0A',
+        'warning-bg': '#1A1408',
       },
       maxWidth: {
-        'container-max': '800px',
+        chat: '56rem',
       },
-      spacing: {
-        base: '4px',
-        gutter: '16px',
+      height: {
+        header: '4rem',
+        sidebar: '16.25rem',
       },
-      fontSize: {
-        'headline-md': ['20px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '700' }],
-        'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.02em', fontWeight: '700' }],
-        'body-md': ['14px', { lineHeight: '20px', fontWeight: '500' }],
-        'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }],
-        'label-sm': ['11px', { lineHeight: '14px', fontWeight: '600' }],
-        'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.01em', fontWeight: '500' }],
+      width: {
+        sidebar: '16.25rem',
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
-      borderRadius: {
-        base: '4px',
+      fontSize: {
+        'title-xl': ['1.875rem', { lineHeight: '2.25rem', fontWeight: '700' }],
+        'title-lg': ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600' }],
+        body: ['0.9375rem', { lineHeight: '1.5rem' }],
+        small: ['0.8125rem', { lineHeight: '1.25rem' }],
+        xs: ['0.75rem', { lineHeight: '1rem' }],
+      },
+      boxShadow: {
+        card: '0 1px 3px rgba(0,0,0,0.35)',
+        glow: '0 0 20px rgba(16, 185, 129, 0.15)',
       },
     },
   },
