@@ -18,7 +18,7 @@ module.exports = {
         'surface-container-high': '#2a2a2a',
         'surface-container-highest': '#353534',
         'on-surface': '#e5e2e1',
-        'on-surface-variant': '#bacac1',
+        'on-surface-variant': '#A0A0A0',
         'on-background': '#e5e2e1',
         outline: '#2A2A2A',
         'outline-variant': '#3c4a43',

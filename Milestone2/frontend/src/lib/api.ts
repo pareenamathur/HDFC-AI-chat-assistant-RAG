@@ -88,6 +88,7 @@ const client: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: TIMEOUT_MS,
+  withCredentials: false,
   validateStatus: (s) => s >= 200 && s < 300,
 });
 
@@ -242,7 +243,10 @@ export function apiErrorMessage(err: unknown): string {
     if (isLocal && process.env.NODE_ENV === 'production') {
       return 'Backend temporarily unavailable: this build is still using the default localhost API URL. Set NEXT_PUBLIC_API_URL to your Railway HTTPS URL in Vercel and redeploy.';
     }
-    return 'Backend temporarily unavailable (network or CORS). Confirm NEXT_PUBLIC_API_URL uses HTTPS on Railway, and set Railway CORS_ALLOW_ORIGINS to your Vercel origin (e.g. https://your-app.vercel.app) or * for testing.';
+    if (isLocal) {
+      return `Cannot reach the API at ${API_BASE_URL}. Start the backend (uvicorn on port 8000) and ensure NEXT_PUBLIC_API_URL in frontend/.env.local matches.`;
+    }
+    return 'Backend temporarily unavailable (network or CORS). Set Vercel NEXT_PUBLIC_API_URL to your Railway HTTPS URL. On Railway use CORS_ALLOW_ORIGINS=* (default) or your exact Vercel origin.';
   }
 
   if (status === 503 || status === 502) {

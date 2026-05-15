@@ -92,12 +92,49 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return v in ("1", "true", "yes", "on")
 
 
-def _cors_origins() -> List[str]:
-    raw = _str_env("CORS_ALLOW_ORIGINS", "*")
-    if not raw or raw == "*":
-        return ["*"]
-    parts = [x.strip() for x in raw.split(",") if x.strip()]
-    return parts if parts else ["*"]
+_DEFAULT_LOCAL_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+)
+
+_DEFAULT_VERCEL_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*vercel\.app"
+
+
+def _configure_cors(app: FastAPI) -> None:
+    """
+    Browser-safe CORS for Vercel + local Next.js.
+    Do not combine allow_origins=['*'] with allow_credentials=True (browsers block it).
+    """
+    raw = _str_env("CORS_ALLOW_ORIGINS", "")
+    regex = _str_env("CORS_ALLOW_ORIGIN_REGEX", _DEFAULT_VERCEL_ORIGIN_REGEX)
+    credentials = _bool_env("CORS_ALLOW_CREDENTIALS", False)
+
+    if not raw or raw.strip() == "*":
+        origins = list(_DEFAULT_LOCAL_ORIGINS)
+        origin_regex = regex
+    else:
+        origins = [x.strip() for x in raw.split(",") if x.strip()]
+        for o in _DEFAULT_LOCAL_ORIGINS:
+            if o not in origins:
+                origins.append(o)
+        origin_regex = regex or None
+
+    logger.info(
+        "CORS configured — allow_origins=%s allow_origin_regex=%s allow_credentials=%s",
+        origins,
+        origin_regex or "(none)",
+        credentials,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_origin_regex=origin_regex,
+        allow_credentials=credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 def _has_groq_key() -> bool:
@@ -278,7 +315,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.16"
+APP_VERSION = "2.2.17"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -824,17 +861,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HDFC Mutual Fund API",
     description="Production RAG API",
-    version="2.2.14",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_configure_cors(app)
 
 
 @app.middleware("http")

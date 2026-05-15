@@ -6,11 +6,12 @@
 
 @layer base {
   html {
+    @apply h-full bg-background;
     scroll-behavior: smooth;
   }
 
   body {
-    @apply antialiased;
+    @apply antialiased bg-background text-on-surface;
   }
 
   .material-symbols-outlined {

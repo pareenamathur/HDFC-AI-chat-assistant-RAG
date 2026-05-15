@@ -150,6 +150,14 @@ export default function Home() {
 
   const configWarning = getApiConfigWarning();
 
+  const corpusLabel = (() => {
+    const raw = health?.nav_as_of_max || health?.corpus_last_updated;
+    if (!raw) return 'CORPUS-BOUND RAG';
+    const d = new Date(raw.length === 10 ? `${raw}T00:00:00Z` : raw);
+    if (Number.isNaN(d.getTime())) return 'CORPUS-BOUND RAG';
+    return `CORPUS: ${d.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}`;
+  })();
+
   const refreshHealth = useCallback(async () => {
     setHealthLoading(true);
     const h = await fetchBackendHealth();
@@ -225,7 +233,7 @@ export default function Home() {
     if (status === 'degraded') {
       return 'border border-[#633f00] bg-[#1A1200] text-on-surface';
     }
-    return 'border border-outline border-l-[3px] border-l-primary bg-surface text-on-surface shadow-sm';
+    return 'border border-outline border-l-[3px] border-l-primary bg-surface text-on-surface';
   };
 
   return (
@@ -263,7 +271,7 @@ export default function Home() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-headline-md leading-tight text-primary">HDFC Assistant</h1>
             <p className="truncate text-label-sm tracking-widest text-on-surface-variant">
-              CORPUS-BOUND RAG
+              {corpusLabel}
             </p>
           </div>
         </div>
@@ -448,7 +456,7 @@ export default function Home() {
                                       rel="noopener noreferrer"
                                       className="flex max-w-full items-center gap-xs rounded-full border border-outline bg-surface-container-low px-sm py-xs text-label-md text-on-surface-variant transition hover:border-primary"
                                     >
-                                      <MsIcon name="open_in_new" className="shrink-0 text-[14px]" />
+                                      <MsIcon name="link" className="shrink-0 text-[14px]" />
                                       <span className="truncate">{src.title || 'Go to source'}</span>
                                     </a>
                                   ))}
@@ -541,7 +549,7 @@ export default function Home() {
         </section>
       </main>
 
-      <nav className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-around border-t border-outline bg-surface-container-high py-xs pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-xs px-lg md:hidden">
+      <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-around border-t border-outline bg-surface-container-high py-xs pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-xs px-lg md:hidden">
         <div className="flex flex-col items-center justify-center rounded-full bg-primary-container px-4 py-1 text-on-primary-container">
           <MsIcon name="chat_bubble" fill className="text-[22px]" />
           <span className="text-label-sm">Assistant</span>
@@ -559,7 +567,7 @@ export default function Home() {
           className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary"
         >
           <MsIcon name="search" className="text-[22px]" />
-          <span className="text-label-sm">New</span>
+          <span className="text-label-sm">Explore</span>
         </button>
       </nav>
     </div>
