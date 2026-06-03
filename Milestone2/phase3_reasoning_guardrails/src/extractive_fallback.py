@@ -32,6 +32,18 @@ _NOISE_RE = re.compile(
     r"(Invest in [Ss]tocks|ETF Screener|IPO Track|Stock Screener|Mutual Fund Performance Portfolio).*$",
     re.IGNORECASE,
 )
+_HOLDINGS_BLOCK_RE = re.compile(
+    r"Holdings\s*\(\s*(\d+)\s*\)(.*?)(?:See All|Minimum investments|Understand terms|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_EQUITY_ROW_RE = re.compile(
+    r"([A-Za-z0-9\s.&]+?)\s+(?:Financial|Energy|Technology|Healthcare|Consumer[^\d]{0,20}|Services|Capital Goods|Metals|Insurance|Communication|Construction|Automobile|Chemicals|Commodities)?\s*Equity\s+([\d.]+)",
+    re.IGNORECASE,
+)
+_CATEGORY_RE = re.compile(
+    r"(Hybrid Dynamic Asset Allocation|Equity Flexi Cap|Equity Large Cap|Equity Mid Cap|Equity Small Cap|Debt Corporate Bond|Hybrid Conservative Hybrid)",
+    re.IGNORECASE,
+)
 
 
 def _clean_text(text: str) -> str:
@@ -39,6 +51,45 @@ def _clean_text(text: str) -> str:
     t = _NOISE_RE.sub("", t)
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip()
+
+
+def extract_holdings_excerpt(text: str, max_chars: int = 1400) -> Optional[str]:
+    m = _HOLDINGS_BLOCK_RE.search(text or "")
+    if not m:
+        return None
+    block = f"Holdings ({m.group(1).strip()})" + (m.group(2) or "")
+    block = _clean_text(block)
+    return block[:max_chars] if block else None
+
+
+def summarize_equity_exposure_from_holdings(text: str) -> Optional[str]:
+    """Approximate equity weight from Groww holdings table (% in Assets column)."""
+    excerpt = extract_holdings_excerpt(text, max_chars=8000)
+    if not excerpt:
+        return None
+    equity_pct = 0.0
+    debt_like = 0.0
+    for m in _EQUITY_ROW_RE.finditer(excerpt):
+        try:
+            equity_pct += float(m.group(2))
+        except ValueError:
+            continue
+    if re.search(r"GOI Sec|Bonds|Debenture|SDL|CD\b", excerpt, re.I):
+        for m in re.finditer(
+            r"(?:GOI Sec|Bonds|Debenture|SDL|CD)\s+([\d.]+)",
+            excerpt,
+            re.I,
+        ):
+            try:
+                debt_like += float(m.group(1))
+            except ValueError:
+                pass
+    if equity_pct > 0:
+        parts = [f"equity holdings in the portfolio total about {equity_pct:.1f}% of disclosed positions"]
+        if debt_like > 0:
+            parts.append(f"debt/sovereign positions about {debt_like:.1f}%")
+        return "; ".join(parts) + "."
+    return None
 
 
 def extract_fund_facts(text: str) -> Dict[str, str]:
@@ -60,6 +111,15 @@ def extract_fund_facts(text: str) -> Dict[str, str]:
     m = _MANAGER_RE.search(t)
     if m:
         facts["fund_manager"] = m.group(1).strip()
+    holdings = extract_holdings_excerpt(t, max_chars=900)
+    if holdings:
+        facts["holdings_excerpt"] = holdings
+    equity_sum = summarize_equity_exposure_from_holdings(t)
+    if equity_sum:
+        facts["equity_exposure_summary"] = equity_sum
+    cat = _CATEGORY_RE.search(t)
+    if cat:
+        facts["fund_category"] = cat.group(1).strip()
     return facts
 
 
@@ -104,19 +164,37 @@ def build_compact_llm_context(
     elif len(groups) > 3:
         groups = groups[:3]
 
+    topic = None
+    if query:
+        try:
+            from result_reranker import detect_query_topic
+
+            topic = detect_query_topic(query, intent)
+        except ImportError:
+            topic = intent
+
     blocks: List[str] = []
     for scheme, chunks in groups:
         facts = _merge_facts(chunks)
         lines = [f"=== {scheme} ==="]
-        if facts.get("nav"):
+        if topic in ("holdings", "equity_exposure"):
+            if facts.get("fund_category"):
+                lines.append(f"Category: {facts['fund_category']}")
+            if facts.get("equity_exposure_summary"):
+                lines.append(f"Equity exposure (from holdings table): {facts['equity_exposure_summary']}")
+            if facts.get("holdings_excerpt"):
+                lines.append(f"Top holdings:\n{facts['holdings_excerpt']}")
+        if topic == "nav" and facts.get("nav"):
             lines.append(f"Latest NAV: {facts['nav']}")
-        if facts.get("aum"):
+        elif topic not in ("holdings", "equity_exposure") and facts.get("nav"):
+            lines.append(f"Latest NAV: {facts['nav']}")
+        if facts.get("aum") and topic not in ("holdings",):
             lines.append(f"AUM: {facts['aum']}")
-        if facts.get("expense_ratio"):
+        if facts.get("expense_ratio") and (topic == "expense_ratio" or not topic):
             lines.append(f"Expense ratio: {facts['expense_ratio']}")
-        if facts.get("exit_load"):
+        if facts.get("exit_load") and (topic == "exit_load" or not topic):
             lines.append(f"Exit load: {facts['exit_load']}")
-        if facts.get("fund_manager"):
+        if facts.get("fund_manager") and "manager" in (query or "").lower():
             lines.append(f"Fund manager: {facts['fund_manager']}")
         if intent:
             lines.append(f"Query intent: {intent}")
@@ -181,17 +259,41 @@ def build_extractive_answer(
         elif "exit load" in q or "exit" in q:
             if facts.get("exit_load"):
                 sentences.append(f"The exit load for {short_name} is {facts['exit_load']}.")
-        elif "nav" in q:
+        elif any(k in q for k in ("holding", "top holding", "constituent")) or intent == "holdings":
+            if facts.get("holdings_excerpt"):
+                top = facts["holdings_excerpt"][:500]
+                sentences.append(
+                    f"Top holdings for {short_name} (from the fund page) include: {top}"
+                )
+        elif any(
+            k in q
+            for k in (
+                "equity exposure",
+                "equity allocation",
+                "equity portion",
+                "stock exposure",
+            )
+        ) or intent == "equity_exposure":
+            if facts.get("equity_exposure_summary"):
+                sentences.append(
+                    f"For {short_name}, {facts['equity_exposure_summary']}"
+                )
+            elif facts.get("fund_category"):
+                sentences.append(
+                    f"{short_name} is categorized as {facts['fund_category']} on the source page."
+                )
+            elif facts.get("holdings_excerpt"):
+                sentences.append(
+                    f"Holdings data for {short_name} shows equity positions such as: "
+                    f"{facts['holdings_excerpt'][:400]}"
+                )
+        elif "nav" in q or intent == "nav":
             if facts.get("nav"):
-                sentences.append(f"The latest NAV for {short_name} is {facts['nav'].split('(')[0].strip()}.")
-        elif "nav" in q and facts.get("nav"):
-            nav_val = facts["nav"].split("(")[0].strip()
-            as_of = ""
-            if "(" in facts["nav"]:
-                as_of = " " + facts["nav"][facts["nav"].index("(") :].strip()
-            sentences.append(f"The latest NAV for {short_name} is {nav_val}{as_of}.")
-        elif facts.get("nav"):
-            sentences.append(f"The latest NAV for {short_name} is {facts['nav']}.")
+                nav_val = facts["nav"].split("(")[0].strip()
+                as_of = ""
+                if "(" in facts["nav"]:
+                    as_of = " " + facts["nav"][facts["nav"].index("(") :].strip()
+                sentences.append(f"The latest NAV for {short_name} is {nav_val}{as_of}.")
 
         if facts.get("aum") and len(sentences) < 2 and (
             "aum" in q or "asset under" in q or "corpus" in q

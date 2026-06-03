@@ -80,6 +80,8 @@ class AnswerGenerator:
         return (
             "You are a Mutual Fund FAQ Assistant for HDFC Mutual Fund.\n"
             "Answer ONLY using the provided context. If multiple sources conflict, prioritize the one with the most recent date.\n"
+            "Match the question type: holdings questions require holdings/portfolio lines from context, NOT NAV unless NAV is asked.\n"
+            "Equity exposure questions require allocation/holdings/category from context — do NOT reply with NAV alone.\n"
             "STRICT CONSTRAINTS:\n"
             "1. Maximum 3-4 sentences total (be extremely concise even for multiple funds).\n"
             "2. Do NOT include URLs, [Source] tags, footnotes, or disclaimers about missing links — "

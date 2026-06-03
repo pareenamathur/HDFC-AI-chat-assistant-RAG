@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(BASE, 'phase3_reasoning_guardrails', 'src'))
 
 from query_processor import QueryProcessor
 from retriever import HybridRetriever
+from result_reranker import boost_results_for_query, detect_query_topic
 from context_builder import ContextBuilder
 from answer_sanitizer import sanitize_answer_text, resolve_source_fields
 from llm_client import MockLLM, classify_llm_failure, _groq_api_key
@@ -157,20 +158,56 @@ class RAGOrchestrator:
             "status": "degraded",
         }
 
-    def _log_chunk_preview(self, results: List[Dict[str, Any]], max_chars: int = 180) -> None:
-        if not results:
-            logger.info("chunk_preview: (no chunks)")
-            return
-        r0 = results[0]
-        meta = r0.get("metadata") or {}
-        text = (r0.get("text") or "")[:max_chars]
-        logger.info(
-            "chunk_preview: first id=%s scheme_name=%r text_len=%s text_preview=%r",
-            r0.get("id"),
-            meta.get("scheme_name"),
-            len(r0.get("text") or ""),
-            text,
+    def _supplement_topic_chunks(
+        self,
+        query: str,
+        results: List[Dict[str, Any]],
+        filters: Optional[Dict[str, Any]],
+        intent: Optional[str],
+        topic: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Vector search often misses holdings tables; inject scheme-specific holdings chunks."""
+        if topic not in ("holdings", "equity_exposure"):
+            return results
+        scheme = None
+        if isinstance(filters, dict):
+            sn = filters.get("scheme_name")
+            if isinstance(sn, str):
+                scheme = sn
+        if not scheme:
+            return results
+        extra = self.retriever.fetch_chunks_matching_text(
+            scheme, "Holdings (", limit=3
         )
+        if not extra:
+            return results
+        seen = {r.get("id") for r in results}
+        merged = list(extra) + [r for r in results if r.get("id") not in seen]
+        return merged[: max(len(results), _GENERAL_RESULTS + 2)]
+
+    def _log_retrieval_hits(
+        self, query: str, results: List[Dict[str, Any]], intent: Optional[str], max_chars: int = 120
+    ) -> None:
+        if not results:
+            logger.info("retrieval_hits: (none)")
+            return
+        topic = detect_query_topic(query, intent)
+        logger.info("retrieval_hits: count=%s topic=%s", len(results), topic)
+        for i, r in enumerate(results[:8], 1):
+            meta = r.get("metadata") or {}
+            text = (r.get("text") or "").replace("\n", " ")
+            has_holdings = "Holdings (" in text
+            logger.info(
+                "retrieval_hits rank=%s score=%.4f adj=%s id=%s scheme=%r holdings=%s url=%s preview=%r",
+                i,
+                float(r.get("score") or 0),
+                r.get("score_adjusted"),
+                r.get("id"),
+                (meta.get("scheme_name") or "")[:48],
+                has_holdings,
+                (meta.get("source_url") or meta.get("page_url") or "")[:64],
+                text[:max_chars],
+            )
 
     def answer_query(self, query: str) -> Dict[str, Any]:
         """Main entry point to get an answer."""
@@ -204,6 +241,10 @@ class RAGOrchestrator:
         t0 = time.perf_counter()
         all_results: List[Dict[str, Any]] = []
         is_multi = False
+        topic = detect_query_topic(q, intent)
+        fetch_n = _GENERAL_RESULTS
+        if topic in ("holdings", "equity_exposure"):
+            fetch_n = max(_GENERAL_RESULTS, 12)
 
         try:
             if filters and "scheme_name" in filters:
@@ -233,10 +274,12 @@ class RAGOrchestrator:
                         all_results.extend(scheme_results)
                 else:
                     logger.info("Retrieval mode=single-fund scheme=%r", scheme_filter)
-                    all_results = self._safe_search(q, _PER_SCHEME_RESULTS + 1, filters, "single-fund")
+                    all_results = self._safe_search(
+                        q, max(_PER_SCHEME_RESULTS + 1, fetch_n // 2), filters, "single-fund"
+                    )
             else:
                 logger.info("Retrieval mode=general (no scheme filter)")
-                all_results = self._safe_search(q, _GENERAL_RESULTS, None, "general")
+                all_results = self._safe_search(q, fetch_n, None, "general")
         except Exception as e:
             logger.exception(
                 "answer_query STAGE=retrieval FAILED after_ms=%.1f err=%s — recovery general search",
@@ -251,7 +294,9 @@ class RAGOrchestrator:
             len(all_results),
             intent,
         )
-        self._log_chunk_preview(all_results)
+            all_results = boost_results_for_query(q, all_results, intent=intent)
+            all_results = self._supplement_topic_chunks(q, all_results, filters, intent, topic)
+            self._log_retrieval_hits(q, all_results, intent)
 
         if not all_results and filters:
             logger.warning(
@@ -267,7 +312,9 @@ class RAGOrchestrator:
                 (time.perf_counter() - t_fb) * 1000,
                 len(all_results),
             )
-            self._log_chunk_preview(all_results)
+            all_results = boost_results_for_query(q, all_results, intent=intent)
+            all_results = self._supplement_topic_chunks(q, all_results, filters, intent, topic)
+            self._log_retrieval_hits(q, all_results, intent)
 
         if not all_results:
             logger.info(

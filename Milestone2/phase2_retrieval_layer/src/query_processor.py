@@ -19,6 +19,12 @@ class QueryProcessor:
 
     # Intent keyword → metadata field mapping
     _INTENT_KEYWORDS = {
+        "top holding": "holdings",
+        "holdings": "holdings",
+        "portfolio holding": "holdings",
+        "equity exposure": "equity_exposure",
+        "equity allocation": "equity_exposure",
+        "stock exposure": "equity_exposure",
         "expense": "expense_ratio",
         "exit": "exit_load",
         "load": "exit_load",
@@ -80,10 +86,11 @@ class QueryProcessor:
             key_tokens = fp[:2]
             matched = all(tok in query_lower for tok in key_tokens)
 
-            # If primary check fails, try just the first token for short/single-word schemes
-            # (e.g. "Pharma" fund when user says "HDFC Pharma Fund")
-            if not matched and len(fp) >= 1:
+            # Single-token fallback only when the query is short or names one distinctive token
+            if not matched and len(fp) == 1:
                 matched = fp[0] in query_lower
+            elif not matched and len(fp) >= 2:
+                matched = sum(1 for tok in fp[:3] if tok in query_lower) >= 2
 
             if matched:
                 found_schemes.append(scheme)
@@ -149,7 +156,8 @@ class QueryProcessor:
     def detect_intent(self, query: str) -> Optional[str]:
         """Detects the specific factual data point being requested."""
         query_lower = query.lower()
-        for kw, intent in self._INTENT_KEYWORDS.items():
+        # Longer phrases first (dict is pre-sorted by length in __init__ if needed)
+        for kw, intent in sorted(self._INTENT_KEYWORDS.items(), key=lambda x: -len(x[0])):
             if kw in query_lower:
                 return intent
         return None

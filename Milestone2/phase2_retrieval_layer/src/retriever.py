@@ -95,6 +95,45 @@ class HybridRetriever:
             gc.collect()
         return self.embedding_model
 
+    def fetch_chunks_matching_text(
+        self,
+        scheme_name: str,
+        substring: str,
+        limit: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """Metadata-filtered scan for chunks containing a literal substring (e.g. Holdings table)."""
+        try:
+            data = self.collection.get(
+                where={"scheme_name": scheme_name},
+                include=["documents", "metadatas"],
+            )
+        except Exception as e:
+            logger.warning("fetch_chunks_matching_text failed: %s", e)
+            return []
+        ids = data.get("ids") or []
+        docs = data.get("documents") or []
+        metas = data.get("metadatas") or []
+        hits: List[Dict[str, Any]] = []
+        needle = (substring or "").lower()
+        for i, cid in enumerate(ids):
+            doc = (docs[i] if i < len(docs) else "") or ""
+            if needle and needle not in doc.lower():
+                continue
+            meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
+            hits.append(
+                {
+                    "id": cid,
+                    "text": doc,
+                    "metadata": meta,
+                    "score": 0.99,
+                    "score_adjusted": 0.99,
+                    "source": "metadata_scan",
+                }
+            )
+            if len(hits) >= limit:
+                break
+        return hits
+
     def warm_vector_pipeline(self, probe_query: str = "HDFC mutual fund overview") -> None:
         """Load MiniLM and run one minimal Chroma query (same thread as caller; for /health readiness)."""
         _ = self.search(probe_query, n_results=1, filters=None)
