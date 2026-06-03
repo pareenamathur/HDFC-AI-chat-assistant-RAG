@@ -51,6 +51,11 @@ def _build_facts_chunk(doc: dict) -> dict | None:
         lines.append(f"Risk level: {sd['risk_level']}")
     if sd.get("category"):
         lines.append(f"Category: {sd['category']}")
+    aum = sd.get("aum")
+    if aum:
+        lines.append(f"Fund size (AUM): {_format_aum_display(aum)}")
+    if sd.get("risk_level"):
+        lines.append(f"Risk level: {sd['risk_level']}")
     lines.append("Portfolio holdings table is available on the source page (Holdings section).")
     text = "\n".join(lines)
     doc_id = meta.get("document_id") or str(uuid.uuid4())

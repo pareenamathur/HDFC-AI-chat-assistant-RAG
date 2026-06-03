@@ -209,11 +209,32 @@ def build_corpus_coverage_report(base_dir: Path) -> Dict[str, Any]:
                 u = md.get("source_url") or md.get("page_url")
                 if u and str(u).startswith("http"):
                     source_url = u
+        risk_present = any(
+            (c.get("metadata") or {}).get("risk_level")
+            or (c.get("structured_data") or {}).get("risk_level")
+            or re.search(r"Risk level:", c.get("text") or "", re.I)
+            for c in sch_chunks
+        )
+        aum_val = None
+        for c in sch_chunks:
+            for bag in (c.get("structured_data"), c.get("metadata")):
+                if isinstance(bag, dict) and bag.get("aum"):
+                    aum_val = str(bag.get("aum"))
+                    break
+            if aum_val:
+                break
         funds.append(
             {
                 "fund_name": scheme.replace(" Direct Growth", "").replace(" Direct Plan Growth", ""),
                 "scheme_name": scheme,
                 "source_url": source_url,
+                "expense_ratio": flags["expense_ratio"],
+                "fund_size_aum": bool(aum_val or flags.get("aum")),
+                "fund_size_aum_value": aum_val,
+                "holdings": flags["holdings"],
+                "allocation": flags["allocation"],
+                "risk_metrics": risk_present,
+                "nav": flags["nav"],
                 "holdings_data_present": flags["holdings"],
                 "allocation_data_present": flags["allocation"],
                 "expense_ratio_present": flags["expense_ratio"],

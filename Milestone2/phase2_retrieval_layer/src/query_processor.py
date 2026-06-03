@@ -165,10 +165,47 @@ class QueryProcessor:
             return {"scheme_name": {"$in": found_schemes}}
         return {}
 
+    _ATTRIBUTE_PATTERNS = (
+        ("expense_ratio", ("expense ratio", "ter", "expense")),
+        ("aum", ("fund size", "aum", "asset under management", "corpus size")),
+        ("nav", ("nav", "net asset value")),
+        ("holdings", ("top holding", "holdings", "portfolio holding", "constituent")),
+        ("equity_exposure", ("equity exposure", "equity allocation", "stock exposure")),
+        ("exit_load", ("exit load",)),
+        ("risk_level", ("risk level", "riskometer", "risk rating")),
+    )
+
+    @classmethod
+    def detect_requested_attributes(cls, query: str) -> List[str]:
+        """All factual attributes explicitly requested (not mutually exclusive)."""
+        q = (query or "").lower()
+        found: List[str] = []
+        for attr, phrases in cls._ATTRIBUTE_PATTERNS:
+            if any(p in q for p in phrases):
+                found.append(attr)
+        return found
+
+    @classmethod
+    def is_comparison_query(cls, query: str) -> bool:
+        q = (query or "").lower()
+        return any(
+            k in q
+            for k in (
+                "compare",
+                "comparison",
+                " versus ",
+                " vs ",
+                " vs.",
+                "difference between",
+            )
+        )
+
     def detect_intent(self, query: str) -> Optional[str]:
-        """Detects the specific factual data point being requested."""
+        """Primary intent — first requested attribute, else keyword scan."""
+        attrs = self.detect_requested_attributes(query)
+        if attrs:
+            return attrs[0]
         query_lower = query.lower()
-        # Longer phrases first (dict is pre-sorted by length in __init__ if needed)
         for kw, intent in sorted(self._INTENT_KEYWORDS.items(), key=lambda x: -len(x[0])):
             if kw in query_lower:
                 return intent
@@ -176,10 +213,13 @@ class QueryProcessor:
 
     def process_query(self, query: str) -> Dict[str, Any]:
         """Main entry point for processing a query."""
+        filters = self.extract_filters(query)
         return {
             "original_query": query,
-            "filters": self.extract_filters(query),
+            "filters": filters,
             "intent": self.detect_intent(query),
+            "requested_attributes": self.detect_requested_attributes(query),
+            "is_comparison": self.is_comparison_query(query),
             "normalized_query": self._normalize(query),
         }
 

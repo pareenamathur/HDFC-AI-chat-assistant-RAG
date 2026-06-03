@@ -7,7 +7,7 @@
     "rebuild_chroma"
   ],
   "source": "corpus_dedupe_ter_facts",
-  "chunks_total": 236,
+  "chunks_total": 221,
   "schemes_count": 15,
   "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
   "vector_store": "ChromaDB",

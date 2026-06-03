@@ -22,6 +22,8 @@ def detect_query_topic(query: str, intent: Optional[str] = None) -> Optional[str
         return "equity_exposure"
     if intent == "expense_ratio":
         return "expense_ratio"
+    if intent == "aum":
+        return "aum"
     q = (query or "").lower()
     if any(k in q for k in ("holding", "top holding", "constituent", "portfolio holding")):
         return "holdings"
@@ -37,6 +39,8 @@ def detect_query_topic(query: str, intent: Optional[str] = None) -> Optional[str
         )
     ):
         return "equity_exposure"
+    if any(k in q for k in ("fund size", "aum", "asset under management")):
+        return "aum"
     if any(k in q for k in ("expense ratio", "expense", "ter")):
         return "expense_ratio"
     if "nav" in q and not any(k in q for k in ("holding", "exposure", "allocation")):
@@ -58,6 +62,9 @@ def _topic_boost(text: str, topic: Optional[str]) -> float:
             boost += 0.12
         if re.search(r"instruments\s+equity\s+\d", t, re.I):
             boost += 0.15
+    if topic == "aum":
+        if re.search(r"Fund size\s*\(AUM\)|Scheme facts for", t, re.I):
+            boost += 0.32
     if topic == "expense_ratio":
         if re.search(r"Total Expense Ratio|Expense Ratio|TER:", t, re.I):
             boost += 0.38

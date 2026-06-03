@@ -44,6 +44,11 @@ _CATEGORY_RE = re.compile(
     r"(Hybrid Dynamic Asset Allocation|Equity Flexi Cap|Equity Large Cap|Equity Mid Cap|Equity Small Cap|Debt Corporate Bond|Hybrid Conservative Hybrid)",
     re.IGNORECASE,
 )
+_FUND_SIZE_RE = re.compile(
+    r"Fund size\s*\(AUM\)\s*:\s*([^\n]+)",
+    re.IGNORECASE,
+)
+_AMC_WIDE_AUM_SNIPPET = "9,37,048"
 
 
 def _clean_text(text: str) -> str:
@@ -99,9 +104,15 @@ def extract_fund_facts(text: str) -> Dict[str, str]:
     m = _NAV_LINE_RE.search(t)
     if m:
         facts["nav"] = f"{m.group(2)} (as of {m.group(1).strip()})"
-    m = _AUM_RE.search(t)
+    m = _FUND_SIZE_RE.search(t)
     if m:
         facts["aum"] = m.group(1).strip()
+    else:
+        m = _AUM_RE.search(t)
+        if m:
+            aum_val = m.group(1).strip()
+            if _AMC_WIDE_AUM_SNIPPET not in aum_val.replace(" ", ""):
+                facts["aum"] = aum_val
     m = _EXPENSE_RE.search(t)
     if m:
         facts["expense_ratio"] = m.group(1).strip()
@@ -154,28 +165,175 @@ def _facts_from_metadata(res: Dict[str, Any]) -> Dict[str, str]:
         nav_as_of = bag.get("nav_as_of")
         if nav and nav_as_of and "nav" not in out:
             out["nav"] = f"{nav} (as of {nav_as_of})"
+        aum = bag.get("aum")
+        if aum is not None and str(aum).strip() and "aum" not in out:
+            out["aum"] = _format_aum_display(aum)
+        risk = bag.get("risk_level")
+        if risk and "risk_level" not in out:
+            out["risk_level"] = str(risk).strip()
     return out
+
+
+def _format_aum_display(raw: Any) -> str:
+    s = str(raw or "").strip().replace(",", "")
+    if not s:
+        return ""
+    if "cr" in s.lower():
+        return s
+    try:
+        v = float(s)
+        if v >= 1000:
+            return f"{v:,.2f} Cr"
+        return f"{v:.2f} Cr"
+    except ValueError:
+        return s if s.endswith("Cr") else f"{s} Cr"
+
+
+def detect_requested_attributes(query: str) -> List[str]:
+    try:
+        from query_processor import QueryProcessor
+
+        return QueryProcessor.detect_requested_attributes(query)
+    except ImportError:
+        q = (query or "").lower()
+        attrs: List[str] = []
+        if any(k in q for k in ("expense", "ter")):
+            attrs.append("expense_ratio")
+        if any(k in q for k in ("fund size", "aum", "asset under")):
+            attrs.append("aum")
+        return attrs
+
+
+def is_comparison_query(query: str) -> bool:
+    try:
+        from query_processor import QueryProcessor
+
+        return QueryProcessor.is_comparison_query(query)
+    except ImportError:
+        return "compare" in (query or "").lower()
+
+
+def _filters_list_schemes(filters: Optional[Dict[str, Any]]) -> List[str]:
+    if not isinstance(filters, dict):
+        return []
+    sn = filters.get("scheme_name")
+    if isinstance(sn, dict) and "$in" in sn:
+        return [str(s) for s in sn["$in"] if s]
+    if isinstance(sn, str) and sn:
+        return [sn]
+    return []
 
 
 def _merge_facts(chunks: List[Dict[str, Any]]) -> Dict[str, str]:
     merged: Dict[str, str] = {}
+    for res in chunks:
+        for k, v in _facts_from_metadata(res).items():
+            if v and k not in merged:
+                merged[k] = v
     for res in chunks:
         text = (res.get("text") or "").strip()
         if not text:
             continue
         for k, v in extract_fund_facts(text).items():
             if k not in merged and v:
-                merged[k] = v
-        for k, v in _facts_from_metadata(res).items():
-            if k not in merged and v:
+                if k == "aum" and _AMC_WIDE_AUM_SNIPPET in v.replace(" ", ""):
+                    continue
                 merged[k] = v
     return merged
+
+
+def _pick_relevant_groups(
+    query: str,
+    groups: List[Tuple[str, List[Dict[str, Any]]]],
+    *,
+    filters: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[str, List[Dict[str, Any]]]]:
+    """Keep all schemes for comparisons / multi-fund filters; else best single match."""
+    if len(groups) <= 1:
+        return groups
+
+    filter_schemes = _filters_list_schemes(filters)
+    if is_comparison_query(query) or len(filter_schemes) > 1:
+        by_name = {s: c for s, c in groups}
+        if filter_schemes:
+            picked = [(s, by_name[s]) for s in filter_schemes if s in by_name]
+            if picked:
+                return picked
+        q = (query or "").lower()
+        scored: List[Tuple[int, str, List[Dict[str, Any]]]] = []
+        for scheme, chunks in groups:
+            s = scheme.lower()
+            score = 0
+            for token in re.findall(r"[a-z0-9]+", q):
+                if len(token) > 3 and token in s:
+                    score += 10
+            if score > 0:
+                scored.append((score, scheme, chunks))
+        scored.sort(key=lambda x: -x[0])
+        if len(scored) >= 2:
+            return [(s, c) for _, s, c in scored[:8]]
+        if scored:
+            return [(scored[0][1], scored[0][2])]
+
+    q = (query or "").lower()
+    scored = []
+    for scheme, chunks in groups:
+        s = scheme.lower()
+        score = 100 if s in q else 0
+        for token in re.findall(r"[a-z0-9]+", q):
+            if len(token) > 3 and token in s:
+                score += 10
+        scored.append((score, scheme, chunks))
+    scored.sort(key=lambda x: -x[0])
+    if scored[0][0] > 0:
+        return [(scored[0][1], scored[0][2])]
+    return [groups[0]]
+
+
+def _append_fact_lines(
+    lines: List[str],
+    facts: Dict[str, str],
+    requested: List[str],
+    query: str,
+) -> None:
+    q = (query or "").lower()
+    want = set(requested) if requested else set()
+    if not want:
+        if "expense" in q:
+            want.add("expense_ratio")
+        if any(k in q for k in ("fund size", "aum", "asset under")):
+            want.add("aum")
+        if "nav" in q:
+            want.add("nav")
+        if any(k in q for k in ("holding", "constituent")):
+            want.add("holdings")
+        if "risk" in q:
+            want.add("risk_level")
+
+    if "expense_ratio" in want and facts.get("expense_ratio"):
+        lines.append(f"Expense ratio: {facts['expense_ratio']}")
+    if "aum" in want and facts.get("aum"):
+        lines.append(f"Fund size (AUM): {facts['aum']}")
+    if "nav" in want and facts.get("nav"):
+        lines.append(f"Latest NAV: {facts['nav']}")
+    if "risk_level" in want and facts.get("risk_level"):
+        lines.append(f"Risk level: {facts['risk_level']}")
+    if "holdings" in want and facts.get("holdings_excerpt"):
+        lines.append(f"Top holdings:\n{facts['holdings_excerpt']}")
+    if "equity_exposure" in want and facts.get("equity_exposure_summary"):
+        lines.append(f"Equity exposure: {facts['equity_exposure_summary']}")
+    if facts.get("exit_load") and ("exit_load" in want or "exit load" in q):
+        lines.append(f"Exit load: {facts['exit_load']}")
+    if facts.get("fund_category"):
+        lines.append(f"Category: {facts['fund_category']}")
 
 
 def build_compact_llm_context(
     results: List[Dict[str, Any]],
     intent: Optional[str] = None,
     query: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    requested_attributes: Optional[List[str]] = None,
 ) -> str:
     """Short, fact-dense context for Groq (avoids HTML noise and token bloat)."""
     if not results:
@@ -183,44 +341,16 @@ def build_compact_llm_context(
 
     groups = _group_by_scheme(results)
     if query:
-        groups = _pick_relevant_groups(query, groups)
+        groups = _pick_relevant_groups(query, groups, filters=filters)
     elif len(groups) > 3:
         groups = groups[:3]
 
-    topic = None
-    if query:
-        try:
-            from result_reranker import detect_query_topic
-
-            topic = detect_query_topic(query, intent)
-        except ImportError:
-            topic = intent
-
+    requested = requested_attributes or (detect_requested_attributes(query or "") if query else [])
     blocks: List[str] = []
     for scheme, chunks in groups:
         facts = _merge_facts(chunks)
         lines = [f"=== {scheme} ==="]
-        if topic in ("holdings", "equity_exposure"):
-            if facts.get("fund_category"):
-                lines.append(f"Category: {facts['fund_category']}")
-            if facts.get("equity_exposure_summary"):
-                lines.append(f"Equity exposure (from holdings table): {facts['equity_exposure_summary']}")
-            if facts.get("holdings_excerpt"):
-                lines.append(f"Top holdings:\n{facts['holdings_excerpt']}")
-        if topic == "expense_ratio" and facts.get("expense_ratio"):
-            lines.append(f"Expense ratio: {facts['expense_ratio']}")
-        if topic == "nav" and facts.get("nav"):
-            lines.append(f"Latest NAV: {facts['nav']}")
-        elif topic not in ("holdings", "equity_exposure") and facts.get("nav"):
-            lines.append(f"Latest NAV: {facts['nav']}")
-        if facts.get("aum") and topic not in ("holdings",):
-            lines.append(f"AUM: {facts['aum']}")
-        if facts.get("expense_ratio") and (topic == "expense_ratio" or not topic):
-            lines.append(f"Expense ratio: {facts['expense_ratio']}")
-        if facts.get("exit_load") and (topic == "exit_load" or not topic):
-            lines.append(f"Exit load: {facts['exit_load']}")
-        if facts.get("fund_manager") and "manager" in (query or "").lower():
-            lines.append(f"Fund manager: {facts['fund_manager']}")
+        _append_fact_lines(lines, facts, requested, query or "")
         if intent:
             lines.append(f"Query intent: {intent}")
         if len(lines) == 1:
@@ -232,37 +362,130 @@ def build_compact_llm_context(
     return "\n\n".join(blocks)
 
 
-def _pick_relevant_groups(
-    query: str, groups: List[Tuple[str, List[Dict[str, Any]]]]
-) -> List[Tuple[str, List[Dict[str, Any]]]]:
-    """When retrieval returns several schemes, prefer the one named in the query."""
-    if len(groups) <= 1:
-        return groups
-    q = (query or "").lower()
-    scored: List[Tuple[int, str, List[Dict[str, Any]]]] = []
+def log_attribute_diagnostics(
+    logger: Any,
+    query: str,
+    results: List[Dict[str, Any]],
+    *,
+    requested_attributes: Optional[List[str]] = None,
+    filters: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Log retrieved chunks vs extracted vs missing attributes per scheme."""
+    requested = requested_attributes or detect_requested_attributes(query)
+    groups = _pick_relevant_groups(query, _group_by_scheme(results), filters=filters)
+    report: Dict[str, Any] = {
+        "requested_attributes": requested,
+        "schemes": [],
+    }
     for scheme, chunks in groups:
-        s = scheme.lower()
-        score = 0
-        if s in q:
-            score += 100
-        for token in re.findall(r"[a-z0-9]+", q):
-            if len(token) > 3 and token in s:
-                score += 10
-        scored.append((score, scheme, chunks))
-    scored.sort(key=lambda x: -x[0])
-    if scored[0][0] > 0:
-        return [(scored[0][1], scored[0][2])]
-    return [groups[0]]
+        facts = _merge_facts(chunks)
+        missing = [a for a in requested if not facts.get(a)]
+        entry = {
+            "scheme": scheme,
+            "chunk_count": len(chunks),
+            "extracted": {k: facts[k] for k in facts if k in requested or k in facts},
+            "missing_requested": missing,
+            "top_chunk_previews": [
+                (c.get("text") or "").replace("\n", " ")[:100] for c in chunks[:3]
+            ],
+        }
+        report["schemes"].append(entry)
+        logger.info(
+            "attribute_diag scheme=%r chunks=%s extracted_keys=%s missing=%s",
+            scheme,
+            len(chunks),
+            list(facts.keys()),
+            missing,
+        )
+    return report
+
+
+def _short_scheme_name(scheme: str) -> str:
+    return (
+        scheme.replace(" Direct Growth", "")
+        .replace(" Direct Plan Growth", "")
+        .strip()
+    )
+
+
+def _build_single_fund_sentences(
+    short_name: str,
+    facts: Dict[str, str],
+    requested: List[str],
+    query: str,
+) -> List[str]:
+    sentences: List[str] = []
+    q = (query or "").lower()
+    if "expense_ratio" in requested and facts.get("expense_ratio"):
+        sentences.append(f"The expense ratio for {short_name} is {facts['expense_ratio']}.")
+    if "aum" in requested and facts.get("aum"):
+        sentences.append(f"The fund size (AUM) for {short_name} is {facts['aum']}.")
+    if "nav" in requested and facts.get("nav"):
+        nav_val = facts["nav"].split("(")[0].strip()
+        as_of = ""
+        if "(" in facts["nav"]:
+            as_of = " " + facts["nav"][facts["nav"].index("(") :].strip()
+        sentences.append(f"The latest NAV for {short_name} is {nav_val}{as_of}.")
+    if "risk_level" in requested and facts.get("risk_level"):
+        sentences.append(f"The risk level for {short_name} is {facts['risk_level']}.")
+    if "holdings" in requested and facts.get("holdings_excerpt"):
+        sentences.append(
+            f"Top holdings for {short_name} include: {facts['holdings_excerpt'][:500]}"
+        )
+    if "equity_exposure" in requested and facts.get("equity_exposure_summary"):
+        sentences.append(f"For {short_name}, {facts['equity_exposure_summary']}")
+    if "exit_load" in requested and facts.get("exit_load"):
+        sentences.append(f"The exit load for {short_name} is {facts['exit_load']}.")
+    if not sentences and "manager" in q and facts.get("fund_manager"):
+        sentences.append(f"The current fund manager for {short_name} is {facts['fund_manager']}.")
+    return sentences
+
+
+def _build_comparison_table(
+    groups: List[Tuple[str, List[Dict[str, Any]]]],
+    requested: List[str],
+) -> str:
+    attrs = requested or ["expense_ratio"]
+    headers = ["Fund"] + [
+        {
+            "expense_ratio": "Expense Ratio",
+            "aum": "Fund Size (AUM)",
+            "nav": "Latest NAV",
+            "risk_level": "Risk",
+            "holdings": "Holdings (excerpt)",
+        }.get(a, a)
+        for a in attrs
+    ]
+    rows: List[List[str]] = []
+    for scheme, chunks in groups:
+        facts = _merge_facts(chunks)
+        short = _short_scheme_name(scheme)
+        row = [short]
+        for attr in attrs:
+            if attr == "holdings":
+                val = (facts.get("holdings_excerpt") or "")[:120]
+                if val:
+                    val += "…"
+            else:
+                val = facts.get(attr) or ""
+            row.append(str(val) if val else "—")
+        rows.append(row)
+    lines = [" | ".join(headers), " | ".join(["---"] * len(headers))]
+    for row in rows:
+        lines.append(" | ".join(row))
+    return "\n".join(lines)
 
 
 def build_extractive_answer(
     query: str,
     results: List[Dict[str, Any]],
     intent: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    requested_attributes: Optional[List[str]] = None,
 ) -> Optional[str]:
     """
-    2–4 sentence answer from structured fields only (no raw HTML dumps).
-    Returns None if insufficient facts.
+    Answer from structured fields only (no raw HTML dumps).
+    Supports multiple requested attributes and multi-fund comparisons.
     """
     q = (query or "").lower()
     if "top 100" in q and (intent == "expense_ratio" or "expense" in q):
@@ -270,85 +493,55 @@ def build_extractive_answer(
             "HDFC Top 100 Fund is not in the indexed corpus (15 Groww scheme pages). "
             "Add its Groww URL to the fetcher config and run corpus refresh to answer TER for that fund."
         )
-    groups = _pick_relevant_groups(query, _group_by_scheme(results))
+    if "midcap opportunities" in q.replace("-", " ") or "mid cap opportunities" in q:
+        if "mid cap fund direct" not in q.replace("opportunities", "").strip():
+            pass  # may still answer with HDFC Mid Cap Fund if matched
+
+    requested = requested_attributes or detect_requested_attributes(query)
+    if not requested and intent:
+        requested = [intent]
+
+    groups = _pick_relevant_groups(
+        query, _group_by_scheme(results), filters=filters
+    )
     if not groups:
         return None
 
-    sentences: List[str] = []
+    filter_schemes = _filters_list_schemes(filters)
+    if filter_schemes and is_comparison_query(query):
+        missing = [s for s in filter_schemes if s not in {g[0] for g in groups}]
+        if "midcap opportunities" in q and missing:
+            note = (
+                "Note: HDFC Midcap Opportunities Fund is not in the indexed corpus; "
+                "HDFC Mid Cap Fund is shown where applicable. "
+            )
+        else:
+            note = ""
+        table = _build_comparison_table(groups, requested)
+        if table and "|" in table:
+            return note + "Comparison:\n\n" + table
 
     if len(groups) == 1:
         scheme, chunks = groups[0]
         facts = _merge_facts(chunks)
-        short_name = scheme.replace(" Direct Growth", "").replace(" Direct Plan Growth", "")
+        short_name = _short_scheme_name(scheme)
+        sentences = _build_single_fund_sentences(short_name, facts, requested, query)
+        if not sentences:
+            return None
+        return " ".join(sentences[:6])
 
-        if "expense" in q or intent == "expense_ratio":
-            if facts.get("expense_ratio"):
-                sentences.append(
-                    f"The expense ratio for {short_name} is {facts['expense_ratio']}."
-                )
-        elif "exit load" in q or "exit" in q:
-            if facts.get("exit_load"):
-                sentences.append(f"The exit load for {short_name} is {facts['exit_load']}.")
-        elif any(k in q for k in ("holding", "top holding", "constituent")) or intent == "holdings":
-            if facts.get("holdings_excerpt"):
-                top = facts["holdings_excerpt"][:500]
-                sentences.append(
-                    f"Top holdings for {short_name} (from the fund page) include: {top}"
-                )
-        elif any(
-            k in q
-            for k in (
-                "equity exposure",
-                "equity allocation",
-                "equity portion",
-                "stock exposure",
-            )
-        ) or intent == "equity_exposure":
-            if facts.get("equity_exposure_summary"):
-                sentences.append(
-                    f"For {short_name}, {facts['equity_exposure_summary']}"
-                )
-            elif facts.get("fund_category"):
-                sentences.append(
-                    f"{short_name} is categorized as {facts['fund_category']} on the source page."
-                )
-            elif facts.get("holdings_excerpt"):
-                sentences.append(
-                    f"Holdings data for {short_name} shows equity positions such as: "
-                    f"{facts['holdings_excerpt'][:400]}"
-                )
-        elif "nav" in q or intent == "nav":
-            if facts.get("nav"):
-                nav_val = facts["nav"].split("(")[0].strip()
-                as_of = ""
-                if "(" in facts["nav"]:
-                    as_of = " " + facts["nav"][facts["nav"].index("(") :].strip()
-                sentences.append(f"The latest NAV for {short_name} is {nav_val}{as_of}.")
+    if is_comparison_query(query) or len(groups) > 1:
+        table = _build_comparison_table(groups, requested)
+        if table:
+            return "Comparison:\n\n" + table
 
-        if facts.get("aum") and len(sentences) < 2 and (
-            "aum" in q or "asset under" in q or "corpus" in q
-        ):
-            sentences.append(f"AUM is {facts['aum']}.")
-        if facts.get("fund_manager") and len(sentences) < 3 and "manager" in q:
-            sentences.append(f"The current fund manager is {facts['fund_manager']}.")
-
-    else:
-        sentences.append("Here is a brief summary for the matching HDFC funds:")
-        for scheme, chunks in groups[:4]:
-            facts = _merge_facts(chunks)
-            short = scheme.replace(" Direct Growth", "")
-            parts: List[str] = []
-            if facts.get("nav"):
-                parts.append(f"NAV {facts['nav']}")
-            if facts.get("expense_ratio"):
-                parts.append(f"expense ratio {facts['expense_ratio']}")
-            if parts:
-                sentences.append(f"{short}: {', '.join(parts)}.")
-
+    sentences: List[str] = []
+    for scheme, chunks in groups[:4]:
+        facts = _merge_facts(chunks)
+        short = _short_scheme_name(scheme)
+        parts = _build_single_fund_sentences(short, facts, requested, query)
+        if parts:
+            sentences.append(" ".join(parts))
     if not sentences:
         return None
-
-    body = " ".join(sentences[:4])
-    if len(body) < 40:
-        return None
-    return body
+    return " ".join(sentences[:6])

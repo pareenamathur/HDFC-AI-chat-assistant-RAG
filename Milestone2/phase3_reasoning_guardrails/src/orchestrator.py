@@ -24,6 +24,7 @@ from llm_client import MockLLM, classify_llm_failure, _groq_api_key
 from extractive_fallback import (
     build_compact_llm_context,
     build_extractive_answer,
+    log_attribute_diagnostics,
     _group_by_scheme,
     _merge_facts,
 )
@@ -111,9 +112,17 @@ class RAGOrchestrator:
         *,
         llm_reason: str = "unavailable",
         intent: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        requested_attributes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Clean fact-based answer when Groq fails — no raw HTML chunk dumps."""
-        extracted = build_extractive_answer(query, results, intent=intent)
+        extracted = build_extractive_answer(
+            query,
+            results,
+            intent=intent,
+            filters=filters,
+            requested_attributes=requested_attributes,
+        )
         if extracted:
             if llm_reason == "auth":
                 suffix = " Configure GROQ_API_KEY on Railway for AI-written summaries."
@@ -166,31 +175,34 @@ class RAGOrchestrator:
         intent: Optional[str],
         topic: Optional[str],
     ) -> List[Dict[str, Any]]:
-        """Vector search often misses holdings tables; inject scheme-specific holdings chunks."""
-        if topic not in ("holdings", "equity_exposure", "expense_ratio"):
+        """Inject scheme-specific facts/holdings chunks vector search often misses."""
+        if topic not in ("holdings", "equity_exposure", "expense_ratio", "aum"):
             return results
-        scheme = None
+        schemes: List[str] = []
         if isinstance(filters, dict):
             sn = filters.get("scheme_name")
             if isinstance(sn, str):
-                scheme = sn
-        if not scheme:
+                schemes = [sn]
+            elif isinstance(sn, dict) and "$in" in sn:
+                schemes = [str(s) for s in sn["$in"] if s]
+        if not schemes:
             return results
         needle = "Holdings ("
-        if topic == "expense_ratio":
-            needle = "Total Expense Ratio"
-        extra = self.retriever.fetch_chunks_matching_text(
-            scheme, needle, limit=3
-        )
-        if topic == "expense_ratio" and not extra:
-            extra = self.retriever.fetch_chunks_matching_text(
-                scheme, "Scheme facts for", limit=2
-            )
-        if not extra:
-            return results
-        seen = {r.get("id") for r in results}
-        merged = list(extra) + [r for r in results if r.get("id") not in seen]
-        return merged[: max(len(results), _GENERAL_RESULTS + 2)]
+        if topic in ("expense_ratio", "aum"):
+            needle = "Scheme facts for"
+        merged = list(results)
+        seen = {r.get("id") for r in merged}
+        for scheme in schemes[:_MAX_MULTI_SCHEME_SEARCHES]:
+            extra = self.retriever.fetch_chunks_matching_text(scheme, needle, limit=2)
+            if topic == "expense_ratio" and not extra:
+                extra = self.retriever.fetch_chunks_matching_text(
+                    scheme, "Total Expense Ratio", limit=2
+                )
+            for row in extra:
+                if row.get("id") not in seen:
+                    seen.add(row.get("id"))
+                    merged.insert(0, row)
+        return merged[: max(len(merged), _GENERAL_RESULTS + 2)]
 
     def _log_retrieval_hits(
         self, query: str, results: List[Dict[str, Any]], intent: Optional[str], max_chars: int = 120
@@ -228,6 +240,8 @@ class RAGOrchestrator:
             proc = self.qp.process_query(q)
             filters = proc["filters"]
             intent = proc["intent"]
+            requested_attributes = proc.get("requested_attributes") or []
+            is_comparison = bool(proc.get("is_comparison"))
         except Exception as e:
             logger.exception(
                 "answer_query STAGE=process_query FAILED after_ms=%.1f err=%s — using general retrieval",
@@ -236,12 +250,16 @@ class RAGOrchestrator:
             )
             filters = {}
             intent = None
+            requested_attributes = []
+            is_comparison = False
 
         logger.info(
-            "answer_query STAGE=process_query OK ms=%.1f filters=%s intent=%s",
+            "answer_query STAGE=process_query OK ms=%.1f filters=%s intent=%s requested=%s comparison=%s",
             (time.perf_counter() - t0) * 1000,
             filters,
             intent,
+            requested_attributes,
+            is_comparison,
         )
 
         # --- Stage: retrieval ---
@@ -249,8 +267,10 @@ class RAGOrchestrator:
         all_results: List[Dict[str, Any]] = []
         is_multi = False
         topic = detect_query_topic(q, intent)
+        if "aum" in requested_attributes:
+            topic = topic or "aum"
         fetch_n = _GENERAL_RESULTS
-        if topic in ("holdings", "equity_exposure"):
+        if topic in ("holdings", "equity_exposure") or is_comparison:
             fetch_n = max(_GENERAL_RESULTS, 12)
 
         try:
@@ -304,6 +324,13 @@ class RAGOrchestrator:
         all_results = boost_results_for_query(q, all_results, intent=intent)
         all_results = self._supplement_topic_chunks(q, all_results, filters, intent, topic)
         self._log_retrieval_hits(q, all_results, intent)
+        log_attribute_diagnostics(
+            logger,
+            q,
+            all_results,
+            requested_attributes=requested_attributes,
+            filters=filters,
+        )
 
         if not all_results and filters:
             logger.warning(
@@ -358,7 +385,13 @@ class RAGOrchestrator:
             logger.warning("answer_query: context empty or placeholder despite chunk_count=%s", len(all_results))
 
         # --- Stage: llm_generate ---
-        compact_ctx = build_compact_llm_context(all_results, intent=intent, query=q)
+        compact_ctx = build_compact_llm_context(
+            all_results,
+            intent=intent,
+            query=q,
+            filters=filters,
+            requested_attributes=requested_attributes,
+        )
         ctx_for_llm = compact_ctx if len(compact_ctx) > 80 else context
         logger.info(
             "answer_query STAGE=llm_context compact_chars=%s full_chars=%s using=%s",
@@ -387,19 +420,34 @@ class RAGOrchestrator:
                 len(ctx_for_llm),
             )
             return self._retrieval_fallback_answer(
-                q, all_results, llm_reason=cat, intent=intent
+                q,
+                all_results,
+                llm_reason=cat,
+                intent=intent,
+                filters=filters,
+                requested_attributes=requested_attributes,
             )
 
         if not isinstance(raw_answer, str):
             logger.warning("answer_query STAGE=llm_generate non-string answer — extractive fallback")
             return self._retrieval_fallback_answer(
-                q, all_results, llm_reason="empty_response", intent=intent
+                q,
+                all_results,
+                llm_reason="empty_response",
+                intent=intent,
+                filters=filters,
+                requested_attributes=requested_attributes,
             )
 
         if not raw_answer.strip():
             logger.warning("answer_query STAGE=llm_generate empty string — extractive fallback")
             return self._retrieval_fallback_answer(
-                q, all_results, llm_reason="empty_response", intent=intent
+                q,
+                all_results,
+                llm_reason="empty_response",
+                intent=intent,
+                filters=filters,
+                requested_attributes=requested_attributes,
             )
 
         ans_preview = raw_answer[:200]
@@ -420,7 +468,12 @@ class RAGOrchestrator:
                 type(e).__name__,
             )
             return self._retrieval_fallback_answer(
-                q, all_results, llm_reason="policy_error", intent=intent
+                q,
+                all_results,
+                llm_reason="policy_error",
+                intent=intent,
+                filters=filters,
+                requested_attributes=requested_attributes,
             )
 
         logger.info(
