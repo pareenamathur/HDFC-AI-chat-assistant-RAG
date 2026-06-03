@@ -294,9 +294,9 @@ class RAGOrchestrator:
             len(all_results),
             intent,
         )
-            all_results = boost_results_for_query(q, all_results, intent=intent)
-            all_results = self._supplement_topic_chunks(q, all_results, filters, intent, topic)
-            self._log_retrieval_hits(q, all_results, intent)
+        all_results = boost_results_for_query(q, all_results, intent=intent)
+        all_results = self._supplement_topic_chunks(q, all_results, filters, intent, topic)
+        self._log_retrieval_hits(q, all_results, intent)
 
         if not all_results and filters:
             logger.warning(

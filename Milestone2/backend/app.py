@@ -319,7 +319,7 @@ def _memory_mb() -> Optional[float]:
 
 
 # Bumped with health/query semantics changes; keep in sync with FastAPI `version=`.
-APP_VERSION = "2.2.24"
+APP_VERSION = "2.2.25"
 
 # --- Runtime state (lazy RAG + degradation) ---
 rag_orchestrator: Any = None
@@ -351,8 +351,8 @@ def _startup_attach_enabled() -> bool:
 
 
 def _rag_attach_memory_ok() -> bool:
-    """Skip attach when RSS is already high — avoids OOM kill on 512 MB Railway plans."""
-    ceiling = _int_env("RAG_MAX_RSS_MB_FOR_ATTACH", 380, 200, 1200)
+    """Skip attach when RSS is already high — avoids OOM kill on small Railway plans."""
+    ceiling = _int_env("RAG_MAX_RSS_MB_FOR_ATTACH", 700, 200, 1600)
     mem = _memory_mb()
     if mem is not None and mem >= ceiling:
         logger.warning(
@@ -416,6 +416,22 @@ def _schedule_rag_attach(app: FastAPI, *, delay_s: float, reason: str) -> None:
             logger.exception("RAG attach task failed (%s)", reason)
 
     _rag_attach_task = asyncio.create_task(_runner())
+
+
+async def _await_inflight_rag_attach(timeout_s: float) -> None:
+    """If startup attach is running, wait for it before starting a duplicate init."""
+    global _rag_attach_task
+    task = _rag_attach_task
+    if task is None or task.done():
+        return
+    logger.info("Waiting up to %.0fs for in-flight RAG startup attach", timeout_s)
+    try:
+        async with asyncio.timeout(timeout_s):
+            await task
+    except TimeoutError:
+        logger.warning("In-flight RAG attach still running after %.0fs — continuing with direct init", timeout_s)
+    except Exception:
+        logger.exception("In-flight RAG attach task failed")
 
 
 def _safe_memory_mb() -> Optional[float]:
@@ -632,11 +648,14 @@ def _sync_init_rag_body() -> None:
             vector_fetch_k=vk,
         )
 
+        if rag_orchestrator is not None:
+            logger.info("RAG init thread finished — orchestrator already attached")
+            return
+
         if _rag_init_timed_out:
             logger.warning(
-                "RAG init finished after timeout — discarding orchestrator to stay in fallback mode."
+                "RAG init thread completed after async timeout — attaching anyway (late attach)"
             )
-            return
 
         rag_orchestrator = orch
         _chroma_loaded = True
@@ -725,8 +744,19 @@ async def ensure_rag_engine_async_from_app(app: FastAPI) -> None:
         )
         return
 
+    if not _chroma_index_on_disk():
+        _degraded_no_rag = True
+        _rag_init_error = _rag_init_error or "chroma.sqlite3 missing at INDEXED_DATA_PATH"
+        logger.error(
+            "RAG init aborted — no chroma.sqlite3 at %s (commit data/indexed/ and redeploy)",
+            _indexed_dir(),
+        )
+        return
+
     lock = app.state.rag_lock
-    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 180.0), 600.0))
+
+    await _await_inflight_rag_attach(init_timeout)
 
     async with lock:
         if rag_orchestrator is not None:
@@ -826,7 +856,7 @@ def _query_combined_timeout_seconds() -> float:
     Wall clock for init + embed + full answer_query (retrieval + Groq).
     Retrieval and LLM each get separate budgets so slow Chroma does not starve the LLM.
     """
-    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 120.0), 600.0))
+    init_timeout = max(5.0, min(_float_env("RAG_INIT_TIMEOUT_SECONDS", 180.0), 600.0))
     retrieval_budget = max(10.0, min(_float_env("QUERY_TIMEOUT_SECONDS", 120.0), 300.0))
     llm_budget = max(20.0, min(_float_env("LLM_QUERY_BUDGET_SECONDS", 90.0), 180.0))
     init_budget = 3.0 if rag_orchestrator is not None else init_timeout
@@ -1050,7 +1080,7 @@ async def lifespan(app: FastAPI):
 
     # Deferred Chroma attach: /health stays light until RAG_STARTUP_DELAY_SECONDS elapses.
     if _startup_attach_enabled() and _chroma_index_on_disk():
-        delay_s = max(5.0, min(_float_env("RAG_STARTUP_DELAY_SECONDS", 30.0), 300.0))
+        delay_s = max(0.0, min(_float_env("RAG_STARTUP_DELAY_SECONDS", 0.0), 300.0))
         logger.info(
             "RAG_STARTUP_ATTACH=true — scheduling Chroma attach in %.0fs (embed_on_startup=%s)",
             delay_s,

@@ -22,13 +22,20 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
+# Bake embedding model into the image so first /query does not download on Railway.
+ENV HF_HOME=/app/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence-transformers
+RUN mkdir -p /app/.cache/huggingface /app/.cache/sentence-transformers && \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 EXPOSE 8000
 ENV PORT=8000 \
     STARTUP_CHROMA_PROBE=false \
     RAG_STARTUP_ATTACH=true \
-    RAG_STARTUP_DELAY_SECONDS=30 \
+    RAG_STARTUP_DELAY_SECONDS=0 \
+    RAG_INIT_TIMEOUT_SECONDS=180 \
     RAG_EMBEDDING_WARM=false \
     RAG_BACKGROUND_WARM=false \
-    RAG_MAX_RSS_MB_FOR_ATTACH=380
+    RAG_MAX_RSS_MB_FOR_ATTACH=700
 
 CMD ["sh", "scripts/railway_start.sh"]
