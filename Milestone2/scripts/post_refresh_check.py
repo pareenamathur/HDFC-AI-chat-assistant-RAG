@@ -17,7 +17,11 @@ _NAV_RE = re.compile(r"NAV:\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2}\b", re.I)
 _MAX_FETCH_FAIL_PCT = 20.0
 
 sys.path.insert(0, str(ROOT))
-from backend.corpus_diagnostics import STALE_NAV_FAIL_DAYS, build_freshness_report  # noqa: E402
+from backend.corpus_diagnostics import (  # noqa: E402
+    STALE_NAV_FAIL_DAYS,
+    build_corpus_coverage_report,
+    build_freshness_report,
+)
 
 _STALE_NAV_DAYS = STALE_NAV_FAIL_DAYS
 
@@ -115,6 +119,28 @@ def main() -> int:
             ") — check Groww/AMFI fetch_manifest",
         )
         ok = False
+    cov = build_corpus_coverage_report(ROOT)
+    print(
+        "coverage:",
+        cov.get("funds_with_holdings"),
+        "/",
+        len(cov.get("funds") or []),
+        "funds have holdings;",
+        cov.get("funds_with_expense_ratio"),
+        "have TER",
+    )
+    for fund in cov.get("funds") or []:
+        if not fund.get("holdings_data_present") or not fund.get("expense_ratio_present"):
+            print(
+                "WARN coverage gap:",
+                fund.get("fund_name"),
+                "holdings=",
+                fund.get("holdings_data_present"),
+                "ter=",
+                fund.get("expense_ratio_present"),
+            )
+            ok = False
+
     today = datetime.now(timezone.utc).date()
     print("validation_date_utc:", today.isoformat())
     return 0 if ok else 1

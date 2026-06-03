@@ -137,6 +137,26 @@ def _group_by_scheme(results: List[Dict[str, Any]]) -> List[Tuple[str, List[Dict
     return [(s, grouped[s]) for s in order]
 
 
+def _facts_from_metadata(res: Dict[str, Any]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for bag in (res.get("metadata"), res.get("structured_data")):
+        if not isinstance(bag, dict):
+            continue
+        er = bag.get("expense_ratio")
+        if er and "expense_ratio" not in out:
+            s = str(er).strip()
+            out["expense_ratio"] = s if "%" in s else f"{s}%"
+        xl = bag.get("exit_load")
+        if xl and "exit_load" not in out:
+            s = str(xl).strip()
+            out["exit_load"] = s if "%" in s else f"{s}%"
+        nav = bag.get("nav")
+        nav_as_of = bag.get("nav_as_of")
+        if nav and nav_as_of and "nav" not in out:
+            out["nav"] = f"{nav} (as of {nav_as_of})"
+    return out
+
+
 def _merge_facts(chunks: List[Dict[str, Any]]) -> Dict[str, str]:
     merged: Dict[str, str] = {}
     for res in chunks:
@@ -144,6 +164,9 @@ def _merge_facts(chunks: List[Dict[str, Any]]) -> Dict[str, str]:
         if not text:
             continue
         for k, v in extract_fund_facts(text).items():
+            if k not in merged and v:
+                merged[k] = v
+        for k, v in _facts_from_metadata(res).items():
             if k not in merged and v:
                 merged[k] = v
     return merged
@@ -184,6 +207,8 @@ def build_compact_llm_context(
                 lines.append(f"Equity exposure (from holdings table): {facts['equity_exposure_summary']}")
             if facts.get("holdings_excerpt"):
                 lines.append(f"Top holdings:\n{facts['holdings_excerpt']}")
+        if topic == "expense_ratio" and facts.get("expense_ratio"):
+            lines.append(f"Expense ratio: {facts['expense_ratio']}")
         if topic == "nav" and facts.get("nav"):
             lines.append(f"Latest NAV: {facts['nav']}")
         elif topic not in ("holdings", "equity_exposure") and facts.get("nav"):
@@ -240,6 +265,11 @@ def build_extractive_answer(
     Returns None if insufficient facts.
     """
     q = (query or "").lower()
+    if "top 100" in q and (intent == "expense_ratio" or "expense" in q):
+        return (
+            "HDFC Top 100 Fund is not in the indexed corpus (15 Groww scheme pages). "
+            "Add its Groww URL to the fetcher config and run corpus refresh to answer TER for that fund."
+        )
     groups = _pick_relevant_groups(query, _group_by_scheme(results))
     if not groups:
         return None

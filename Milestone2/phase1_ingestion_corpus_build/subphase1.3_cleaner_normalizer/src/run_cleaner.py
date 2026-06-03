@@ -51,6 +51,32 @@ def _reinject_canonical_nav_line(
     return prefix + "\n\n" + text
 
 
+def _reinject_scheme_facts_lines(text: str, metadata: dict) -> str:
+    """Prepend TER / exit load so retrieval and extractive paths can match fee intents."""
+    lines: list[str] = []
+    er = metadata.get("expense_ratio")
+    if er is not None and str(er).strip():
+        er_s = str(er).strip()
+        if "%" not in er_s:
+            er_s = f"{er_s}%"
+        lines.append(f"Total Expense Ratio (TER): {er_s}")
+    xl = metadata.get("exit_load")
+    if xl is not None and str(xl).strip():
+        xl_s = str(xl).strip()
+        if "%" not in xl_s and not xl_s.lower().endswith("%"):
+            xl_s = f"{xl_s}%"
+        lines.append(f"Exit load: {xl_s}")
+    risk = metadata.get("risk_level")
+    if risk:
+        lines.append(f"Risk level: {risk}")
+    if not lines:
+        return text
+    block = " | ".join(lines)
+    if block[:40] in text:
+        return text
+    return block + "\n\n" + text
+
+
 def main():
     """Run the cleaner and normalizer to process extracted data."""
     logger.info("Starting Phase 1.3 Cleaner & Normalizer...")
@@ -95,6 +121,7 @@ def main():
             final_text = _reinject_canonical_nav_line(
                 final_text, doc["scheme_name"], cleaned_metadata
             )
+            final_text = _reinject_scheme_facts_lines(final_text, cleaned_metadata)
             
             page_url = doc.get('source_url') or doc.get('filename', '')
             cleaned_metadata = dict(cleaned_metadata)

@@ -152,6 +152,84 @@ def load_chunked_nav_dates(base_dir: Path) -> Tuple[Set[date], int]:
     return found, count
 
 
+def build_corpus_coverage_report(base_dir: Path) -> Dict[str, Any]:
+    """Per-fund coverage flags for holdings, TER, NAV, and latest dates (startup / CI)."""
+    chunks, _ = load_chunked_file(base_dir)
+    if not chunks:
+        return {"funds": [], "total_chunks": 0}
+
+    _holdings_re = re.compile(r"Holdings\s*\(\s*\d+\s*\)", re.I)
+    _expense_re = re.compile(
+        r"(?:Total Expense Ratio|Expense Ratio|TER:|expense_ratio\s+[\d.])", re.I
+    )
+    _nav_re = re.compile(r"NAV:\s*\d", re.I)
+    _alloc_re = re.compile(r"asset allocation|hybrid dynamic|equity flexi", re.I)
+
+    by_scheme: Dict[str, List[Dict[str, Any]]] = {}
+    for c in chunks:
+        sn = c.get("scheme_name") or (c.get("metadata") or {}).get("scheme_name") or "?"
+        by_scheme.setdefault(sn, []).append(c)
+
+    funds: List[Dict[str, Any]] = []
+    for scheme, sch_chunks in sorted(by_scheme.items()):
+        flags = {
+            "holdings": False,
+            "allocation": False,
+            "expense_ratio": False,
+            "nav": False,
+        }
+        latest: Optional[str] = None
+        source_url = None
+        for c in sch_chunks:
+            text = c.get("text") or ""
+            if _holdings_re.search(text):
+                flags["holdings"] = True
+            if _alloc_re.search(text, re.I):
+                flags["allocation"] = True
+            if _expense_re.search(text):
+                flags["expense_ratio"] = True
+            sd = c.get("structured_data") or {}
+            md = c.get("metadata") or {}
+            if sd.get("expense_ratio") or md.get("expense_ratio"):
+                flags["expense_ratio"] = True
+            if _nav_re.search(text):
+                flags["nav"] = True
+            nd = parse_iso_nav_date(md.get("nav_as_of") or sd.get("nav_as_of"))
+            if not nd:
+                for m in _NAV_RE.finditer(text):
+                    d = parse_nav_token(m.group(0))
+                    if d:
+                        nd = d
+                        break
+            if nd:
+                iso = nd.isoformat()
+                if latest is None or iso > latest:
+                    latest = iso
+            if not source_url:
+                u = md.get("source_url") or md.get("page_url")
+                if u and str(u).startswith("http"):
+                    source_url = u
+        funds.append(
+            {
+                "fund_name": scheme.replace(" Direct Growth", "").replace(" Direct Plan Growth", ""),
+                "scheme_name": scheme,
+                "source_url": source_url,
+                "holdings_data_present": flags["holdings"],
+                "allocation_data_present": flags["allocation"],
+                "expense_ratio_present": flags["expense_ratio"],
+                "nav_present": flags["nav"],
+                "latest_date_found": latest,
+                "chunk_count": len(sch_chunks),
+            }
+        )
+    return {
+        "total_chunks": len(chunks),
+        "funds": funds,
+        "funds_with_holdings": sum(1 for f in funds if f["holdings_data_present"]),
+        "funds_with_expense_ratio": sum(1 for f in funds if f["expense_ratio_present"]),
+    }
+
+
 def build_freshness_report(
     base_dir: Path, *, stale_nav_days: int = STALE_NAV_FAIL_DAYS
 ) -> Dict[str, Any]:

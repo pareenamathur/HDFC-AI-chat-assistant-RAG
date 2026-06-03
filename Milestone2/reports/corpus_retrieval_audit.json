@@ -1,0 +1,643 @@
+{
+  "generated_at": "2026-06-03T09:04:35Z",
+  "chunk_file": "E:\\AI PM Projects\\Milestone2\\data\\processed\\chunked_data_phase1.4.json",
+  "total_chunks": 236,
+  "nav_dates_in_corpus": [
+    "2026-05-14",
+    "2026-06-02"
+  ],
+  "nav_as_of_max": "2026-06-02",
+  "source_audit": [
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-growth",
+      "scheme_name": "HDFC Balanced Advantage Fund Direct Growth",
+      "chunk_count": 34,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "allocation": 6,
+        "holdings": 1,
+        "other": 24
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:23Z",
+      "html_file": "HDFC_Balanced_Advantage_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-bse-sensex-index-fund-direct-growth",
+      "scheme_name": "HDFC BSE Sensex Index Fund Direct Growth",
+      "chunk_count": 26,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "other": 19,
+        "holdings": 1,
+        "allocation": 2
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:42Z",
+      "html_file": "HDFC_BSE_Sensex_Index_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+      "scheme_name": "HDFC Flexi Cap Direct Plan Growth",
+      "chunk_count": 13,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 8
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:47Z",
+      "html_file": "HDFC_Flexi_Cap_Direct_Plan_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-gold-etf-fund-of-fund-direct-plan-growth",
+      "scheme_name": "HDFC Gold ETF Fund of Fund Direct Plan Growth",
+      "chunk_count": 9,
+      "content_types_in_chunks": {
+        "risk": 2,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 5
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:50Z",
+      "html_file": "HDFC_Gold_ETF_Fund_of_Fund_Direct_Plan_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-medium-term-opportunities-fund-direct-growth",
+      "scheme_name": "HDFC Corporate Bond Fund Direct Plan Growth",
+      "chunk_count": 23,
+      "content_types_in_chunks": {
+        "risk": 2,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 19
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:44Z",
+      "html_file": "HDFC_Corporate_Bond_Fund_Direct_Plan_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+      "scheme_name": "HDFC Mid Cap Fund Direct Growth",
+      "chunk_count": 14,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 9
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:02Z",
+      "html_file": "HDFC_Mid_Cap_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-monthly-i-come-plan-long-term-plan-direct-growth",
+      "scheme_name": "HDFC Hybrid Debt Fund Direct Growth",
+      "chunk_count": 16,
+      "content_types_in_chunks": {
+        "risk": 5,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 9,
+        "allocation": 1
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:47:59Z",
+      "html_file": "HDFC_Hybrid_Debt_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth",
+      "scheme_name": "HDFC Multi Cap Fund Direct Growth",
+      "chunk_count": 16,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 11
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:05Z",
+      "html_file": "HDFC_Multi_Cap_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-nifty-50-index-fund-direct-growth",
+      "scheme_name": "HDFC NIFTY 50 Index Fund Direct Growth",
+      "chunk_count": 12,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 7
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:23Z",
+      "html_file": "HDFC_NIFTY_50_Index_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-nifty-top-20-equal-weight-index-fund-direct-growth",
+      "scheme_name": "HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth",
+      "chunk_count": 10,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 5
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:26Z",
+      "html_file": "HDFC_Nifty_Top_20_Equal_Weight_Index_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-nifty50-equal-weight-index-fund-direct-growth",
+      "scheme_name": "HDFC NIFTY50 Equal Weight Index Fund Direct Growth",
+      "chunk_count": 12,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 7
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:20Z",
+      "html_file": "HDFC_NIFTY50_Equal_Weight_Index_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-pharma-and-healthcare-fund-direct-growth",
+      "scheme_name": "HDFC Pharma And Healthcare Fund Direct Growth",
+      "chunk_count": 10,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 5
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:34Z",
+      "html_file": "HDFC_Pharma_And_Healthcare_Fund_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-short-term-opportunities-fund-direct-growth",
+      "scheme_name": "HDFC Short Term Debt Fund Direct Plan Growth",
+      "chunk_count": 18,
+      "content_types_in_chunks": {
+        "risk": 2,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 13,
+        "allocation": 1
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:37Z",
+      "html_file": "HDFC_Short_Term_Debt_Fund_Direct_Plan_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-silver-etf-fof-direct-growth",
+      "scheme_name": "HDFC Silver ETF FoF Direct Growth",
+      "chunk_count": 9,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 4
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:40Z",
+      "html_file": "HDFC_Silver_ETF_FoF_Direct_Growth.html"
+    },
+    {
+      "source_url": "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth",
+      "scheme_name": "HDFC Small Cap Fund Direct Growth",
+      "chunk_count": 14,
+      "content_types_in_chunks": {
+        "risk": 4,
+        "nav": 3,
+        "boilerplate": 1,
+        "expense_ratio": 2,
+        "holdings": 1,
+        "other": 9
+      },
+      "latest_nav_date_in_chunks": "2026-06-02",
+      "fetch_nav_as_of": "2026-06-02",
+      "fetch_fetched_at": "2026-06-03T07:48:52Z",
+      "html_file": "HDFC_Small_Cap_Fund_Direct_Growth.html"
+    }
+  ],
+  "coverage_report": [
+    {
+      "fund_name": "HDFC BSE Sensex Index Fund",
+      "scheme_name_full": "HDFC BSE Sensex Index Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": true,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 26
+    },
+    {
+      "fund_name": "HDFC Balanced Advantage Fund",
+      "scheme_name_full": "HDFC Balanced Advantage Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": true,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 34
+    },
+    {
+      "fund_name": "HDFC Corporate Bond Fund",
+      "scheme_name_full": "HDFC Corporate Bond Fund Direct Plan Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 23
+    },
+    {
+      "fund_name": "HDFC Flexi Cap",
+      "scheme_name_full": "HDFC Flexi Cap Direct Plan Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 13
+    },
+    {
+      "fund_name": "HDFC Gold ETF Fund of Fund",
+      "scheme_name_full": "HDFC Gold ETF Fund of Fund Direct Plan Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 9
+    },
+    {
+      "fund_name": "HDFC Hybrid Debt Fund",
+      "scheme_name_full": "HDFC Hybrid Debt Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": true,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 16
+    },
+    {
+      "fund_name": "HDFC Mid Cap Fund",
+      "scheme_name_full": "HDFC Mid Cap Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 14
+    },
+    {
+      "fund_name": "HDFC Multi Cap Fund",
+      "scheme_name_full": "HDFC Multi Cap Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 16
+    },
+    {
+      "fund_name": "HDFC NIFTY 50 Index Fund",
+      "scheme_name_full": "HDFC NIFTY 50 Index Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 12
+    },
+    {
+      "fund_name": "HDFC NIFTY50 Equal Weight Index Fund",
+      "scheme_name_full": "HDFC NIFTY50 Equal Weight Index Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 12
+    },
+    {
+      "fund_name": "HDFC Nifty Top 20 Equal Weight Index Fund",
+      "scheme_name_full": "HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 10
+    },
+    {
+      "fund_name": "HDFC Pharma And Healthcare Fund",
+      "scheme_name_full": "HDFC Pharma And Healthcare Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 10
+    },
+    {
+      "fund_name": "HDFC Short Term Debt Fund",
+      "scheme_name_full": "HDFC Short Term Debt Fund Direct Plan Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": true,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 18
+    },
+    {
+      "fund_name": "HDFC Silver ETF FoF",
+      "scheme_name_full": "HDFC Silver ETF FoF Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 9
+    },
+    {
+      "fund_name": "HDFC Small Cap Fund",
+      "scheme_name_full": "HDFC Small Cap Fund Direct Growth",
+      "holdings_data_present": true,
+      "allocation_data_present": false,
+      "expense_ratio_present": true,
+      "nav_present": true,
+      "risk_present": true,
+      "latest_date_found": "2026-06-02",
+      "chunk_count": 14
+    }
+  ],
+  "chunk_analysis": {
+    "total_chunks": 236,
+    "exact_duplicate_hash_groups": 0,
+    "duplicate_chunks_from_exact_hash": 0,
+    "repetitive_prefix_groups": 10,
+    "chunks_tagged_nav_only": 3,
+    "nav_only_percentage": 1.3,
+    "chunks_with_holdings_tag": 15,
+    "tag_counts_across_chunks": {
+      "risk": 55,
+      "nav": 45,
+      "boilerplate": 15,
+      "expense_ratio": 30,
+      "other": 154,
+      "holdings": 15,
+      "allocation": 10
+    },
+    "boilerplate_tagged_chunks": 15
+  },
+  "retrieval_audit": [
+    {
+      "query": "What is the equity exposure in HDFC Balanced Advantage Fund?",
+      "filters": {
+        "scheme_name": "HDFC Balanced Advantage Fund Direct Growth"
+      },
+      "intent": "equity_exposure",
+      "retrieval_used_filter": true,
+      "retried_without_filter": false,
+      "top_hits": [
+        {
+          "rank": 1,
+          "score": 0.99,
+          "score_adjusted": 0.99,
+          "chunk_id": "hdfc_html_1ebca22a_chunk_3",
+          "scheme_name": "HDFC Balanced Advantage Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-growth",
+          "has_holdings_table": true,
+          "has_nav_line": false,
+          "has_expense_ratio": false,
+          "preview": "Returns 1 year 60,000 59,015 -1.64  3 years 1,80,000 1,97,886  9.94  5 years 3,00,000 4,10,798  36.93  10 years 6,00,000 13,06,831  117.81  Holdings ( 290 ) Name Sector Instruments"
+        }
+      ],
+      "compact_llm_context": "=== HDFC Balanced Advantage Fund Direct Growth ===\nEquity exposure (from holdings table): equity holdings in the portfolio total about 40.7% of disclosed positions; debt/sovereign positions about 3.6%.\nTop holdings:\nHoldings (290) Name Sector Instruments Assets ICICI Bank Ltd. Financial Equity 4.47 HDFC Bank Ltd. Financial Equity 4.14 Reliance Industries Ltd. Energy Equity 4.09 State Bank of India Financial Equity 3.55 Bharti Airtel Ltd. Communication Equity 3.10 Larsen Toubro Ltd. Construction Equity 2.51 NTPC Ltd. Energy Equity 2.41 Axis Bank Ltd. Financial Equity 2.40 GOI Sovereign GOI Sec 2.10 Coal India Ltd. Energy Equity 2.02 Infosys Ltd. Technology Equity 1.82 GOI Sovereign GOI Sec 1.46 Maruti Suzuki India Ltd. Automobile Equity 1.44 Sun Pharmaceutical Industries Ltd. Healthcare Equity 1.43 Kotak Mahindra Bank Ltd. Financial Equity 1.39 Eternal Ltd. Services Equity 1.27 ITC Ltd. Consumer Staples Equity 1.24 Lupin Ltd. Healthcare Equity 1.24 HCL Technologies Ltd. Technology Equity 1.15 Tata Consultancy Services Ltd. Technology Equity 1.\nQuery intent: equity_exposure",
+      "extractive_answer": "For HDFC Balanced Advantage Fund, equity holdings in the portfolio total about 40.7% of disclosed positions; debt/sovereign positions about 3.6%."
+    },
+    {
+      "query": "What are the top holdings of HDFC Flexi Cap Fund?",
+      "filters": {
+        "scheme_name": "HDFC Flexi Cap Direct Plan Growth"
+      },
+      "intent": "holdings",
+      "retrieval_used_filter": true,
+      "retried_without_filter": false,
+      "top_hits": [
+        {
+          "rank": 1,
+          "score": 0.99,
+          "score_adjusted": 0.99,
+          "chunk_id": "hdfc_html_26902561_chunk_3",
+          "scheme_name": "HDFC Flexi Cap Direct Plan Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+          "has_holdings_table": true,
+          "has_nav_line": false,
+          "has_expense_ratio": false,
+          "preview": "Returns 1 year 60,000 58,504 -2.49  3 years 1,80,000 2,05,507  14.17  5 years 3,00,000 4,37,204  45.73  10 years 6,00,000 14,60,771  143.46  Holdings ( 68 ) Name Sector Instruments"
+        }
+      ],
+      "compact_llm_context": "=== HDFC Flexi Cap Direct Plan Growth ===\nEquity exposure (from holdings table): equity holdings in the portfolio total about 64.2% of disclosed positions.\nTop holdings:\nHoldings (68) Name Sector Instruments Assets ICICI Bank Ltd. Financial Equity 8.69 Axis Bank Ltd. Financial Equity 6.83 HDFC Bank Ltd. Financial Equity 6.81 State Bank of India Financial Equity 4.74 SBI Life Insurance Company Ltd. Insurance Equity 3.79 Kotak Mahindra Bank Ltd. Financial Equity 3.47 Larsen Toubro Ltd. Construction Equity 3.35 Bharti Airtel Ltd. Communication Equity 3.10 Maruti Suzuki India Ltd. Automobile Equity 2.78 Power Grid Corporation Of India Ltd. Energy Equity 2.78 Cipla Ltd. Healthcare Equity 2.74 Eternal Ltd. Services Equity 2.55 HCL Technologies Ltd. Technology Equity 2.54 Eicher Motors Ltd. Automobile Equity 2.46 Interglobe Aviation Ltd. Services Equity 2.43 Reliance Industries Ltd. Energy Equity 2.19 Bajaj Auto Ltd. Automobile Equity 1.99 JSW Steel Ltd. Metals Mining Equity 1.\nQuery intent: holdings",
+      "extractive_answer": "Top holdings for HDFC Flexi Cap (from the fund page) include: Holdings (68) Name Sector Instruments Assets ICICI Bank Ltd. Financial Equity 8.69 Axis Bank Ltd. Financial Equity 6.83 HDFC Bank Ltd. Financial Equity 6.81 State Bank of India Financial Equity 4.74 SBI Life Insurance Company Ltd. Insurance Equity 3.79 Kotak Mahindra Bank Ltd. Financial Equity 3.47 Larsen Toubro Ltd. Construction Equity 3.35 Bharti Airtel Ltd. Communication Equity 3.10 Maruti Suzuki India Ltd. Automobile Equity 2.78 Power Grid Corporation Of India Ltd. Energy Equity 2.78 Cipla L"
+    },
+    {
+      "query": "What is the expense ratio of HDFC Top 100 Fund?",
+      "filters": {},
+      "intent": "expense_ratio",
+      "retrieval_used_filter": false,
+      "retried_without_filter": false,
+      "top_hits": [
+        {
+          "rank": 1,
+          "score": 0.7623,
+          "score_adjusted": 1.3923,
+          "chunk_id": "hdfc_html_e3ca4b9b_facts",
+          "scheme_name": "HDFC Multi Cap Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Multi Cap Fund Direct Growth: Latest NAV: 2026-06-02 \u20b918.90400 Total Expense Ratio (TER): 0.82% Exit load: 1% Risk level: Very High Risk Category: Equity Port"
+        },
+        {
+          "rank": 2,
+          "score": 0.7542,
+          "score_adjusted": 1.3842,
+          "chunk_id": "hdfc_html_bafaa396_facts",
+          "scheme_name": "HDFC Pharma And Healthcare Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-pharma-and-healthcare-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Pharma And Healthcare Fund Direct Growth: Latest NAV: 2026-06-02 \u20b919.77900 Total Expense Ratio (TER): 1.98% Exit load: 1% Risk level: Very High Risk Category:"
+        },
+        {
+          "rank": 3,
+          "score": 0.7406,
+          "score_adjusted": 1.3706,
+          "chunk_id": "hdfc_html_c1979fe7_facts",
+          "scheme_name": "HDFC Mid Cap Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Mid Cap Fund Direct Growth: Latest NAV: 2026-06-02 \u20b9219.67300 Total Expense Ratio (TER): 0.8% Exit load: 1% Risk level: Very High Risk Category: Equity Portfo"
+        },
+        {
+          "rank": 4,
+          "score": 0.7319,
+          "score_adjusted": 1.3619,
+          "chunk_id": "hdfc_html_12a2bbbf_facts",
+          "scheme_name": "HDFC Small Cap Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Small Cap Fund Direct Growth: Latest NAV: 2026-06-02 \u20b9152.05600 Total Expense Ratio (TER): 0.77% Exit load: 1% Risk level: Very High Risk Category: Equity Por"
+        },
+        {
+          "rank": 5,
+          "score": 0.7235,
+          "score_adjusted": 1.3535,
+          "chunk_id": "hdfc_html_f98ff1a2_facts",
+          "scheme_name": "HDFC Gold ETF Fund of Fund Direct Plan Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-gold-etf-fund-of-fund-direct-plan-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Gold ETF Fund of Fund Direct Plan Growth: Latest NAV: 2026-06-02 \u20b948.85390 Total Expense Ratio (TER): 0.2% Exit load: 1% Risk level: High Risk Category: Commo"
+        },
+        {
+          "rank": 6,
+          "score": 0.7202,
+          "score_adjusted": 1.3502,
+          "chunk_id": "hdfc_html_1244104d_facts",
+          "scheme_name": "HDFC Corporate Bond Fund Direct Plan Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-medium-term-opportunities-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Corporate Bond Fund Direct Plan Growth: Latest NAV: 2026-06-02 \u20b934.41240 Total Expense Ratio (TER): 0.38% Exit load: 0.25% Risk level: Moderate Risk Category:"
+        },
+        {
+          "rank": 7,
+          "score": 0.7181,
+          "score_adjusted": 1.3481,
+          "chunk_id": "hdfc_html_ccfbeed4_facts",
+          "scheme_name": "HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-nifty-top-20-equal-weight-index-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Nifty Top 20 Equal Weight Index Fund Direct Growth: Latest NAV: 2026-06-02 \u20b99.66270 Total Expense Ratio (TER): 0.42% Exit load: 0.005% Risk level: Very High R"
+        },
+        {
+          "rank": 8,
+          "score": 0.7174,
+          "score_adjusted": 1.3474,
+          "chunk_id": "hdfc_html_290c1cc6_facts",
+          "scheme_name": "HDFC NIFTY 50 Index Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-nifty-50-index-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC NIFTY 50 Index Fund Direct Growth: Latest NAV: 2026-06-02 \u20b9228.61900 Total Expense Ratio (TER): 0.27% Exit load: 0.25% Risk level: Very High Risk Category: Eq"
+        },
+        {
+          "rank": 9,
+          "score": 0.7149,
+          "score_adjusted": 1.3449,
+          "chunk_id": "hdfc_html_1ebca22a_facts",
+          "scheme_name": "HDFC Balanced Advantage Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC Balanced Advantage Fund Direct Growth: Latest NAV: 2026-06-02 \u20b9549.71000 Total Expense Ratio (TER): 0.8% Exit load: 15% Risk level: Very High Risk Category: H"
+        },
+        {
+          "rank": 10,
+          "score": 0.7068,
+          "score_adjusted": 1.3368,
+          "chunk_id": "hdfc_html_dd7b63e6_facts",
+          "scheme_name": "HDFC NIFTY50 Equal Weight Index Fund Direct Growth",
+          "source_url": "https://groww.in/mutual-funds/hdfc-nifty50-equal-weight-index-fund-direct-growth",
+          "has_holdings_table": false,
+          "has_nav_line": true,
+          "has_expense_ratio": true,
+          "preview": "Scheme facts for HDFC NIFTY50 Equal Weight Index Fund Direct Growth: Latest NAV: 2026-06-02 \u20b918.26460 Total Expense Ratio (TER): 0.4% Exit load: 0.005% Risk level: Very High Risk C"
+        }
+      ],
+      "compact_llm_context": "=== HDFC Multi Cap Fund Direct Growth ===\nExpense ratio: 0.82%\nLatest NAV: 18.90400 (as of 2026-06-02)\nExpense ratio: 0.82%\nQuery intent: expense_ratio",
+      "extractive_answer": "HDFC Top 100 Fund is not in the indexed corpus (15 Groww scheme pages). Add its Groww URL to the fetcher config and run corpus refresh to answer TER for that fund."
+    }
+  ],
+  "root_cause_hints": [
+    "COVERAGE: HDFC Top 100 Fund is NOT in the indexed corpus (15 Groww URLs only) \u2014 expense-ratio query cannot be fund-specific."
+  ]
+}

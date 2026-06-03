@@ -56,9 +56,11 @@ def chunk_to_metadata(chunk: Dict[str, Any]) -> Dict[str, Any]:
     if md.get("nav_as_of"):
         meta["nav_as_of"] = str(md.get("nav_as_of"))[:32]
     meta["category"] = str(md.get("category") or "")[:256]
-    for k in ("expense_ratio", "exit_load", "nav", "aum", "sip_minimum", "risk_level"):
-        if md.get(k) is not None:
-            meta[k] = str(md.get(k))[:256]
+    sd = chunk.get("structured_data") or {}
+    for k in ("expense_ratio", "exit_load", "nav", "aum", "sip_minimum", "risk_level", "nav_as_of"):
+        val = md.get(k) if md.get(k) is not None else sd.get(k)
+        if val is not None:
+            meta[k] = str(val)[:256]
     if md.get("chunk_number") is not None:
         try:
             meta["chunk_number"] = int(md["chunk_number"])

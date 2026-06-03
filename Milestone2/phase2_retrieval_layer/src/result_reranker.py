@@ -20,6 +20,8 @@ def detect_query_topic(query: str, intent: Optional[str] = None) -> Optional[str
         return "holdings"
     if intent == "equity_exposure":
         return "equity_exposure"
+    if intent == "expense_ratio":
+        return "expense_ratio"
     q = (query or "").lower()
     if any(k in q for k in ("holding", "top holding", "constituent", "portfolio holding")):
         return "holdings"
@@ -35,6 +37,8 @@ def detect_query_topic(query: str, intent: Optional[str] = None) -> Optional[str
         )
     ):
         return "equity_exposure"
+    if any(k in q for k in ("expense ratio", "expense", "ter")):
+        return "expense_ratio"
     if "nav" in q and not any(k in q for k in ("holding", "exposure", "allocation")):
         return "nav"
     return None
@@ -54,6 +58,13 @@ def _topic_boost(text: str, topic: Optional[str]) -> float:
             boost += 0.12
         if re.search(r"instruments\s+equity\s+\d", t, re.I):
             boost += 0.15
+    if topic == "expense_ratio":
+        if re.search(r"Total Expense Ratio|Expense Ratio|TER:", t, re.I):
+            boost += 0.38
+        if re.search(r"expense_ratio\s+[\d.]", t, re.I):
+            boost += 0.22
+        if t.startswith("Scheme facts for"):
+            boost += 0.25
     if topic == "nav" and re.search(r"\|\s*NAV:\s*\d", t, re.I):
         boost += 0.08
     if _GROWW_NOISE.search(t[:400]) and not _HOLDINGS_MARK.search(t):

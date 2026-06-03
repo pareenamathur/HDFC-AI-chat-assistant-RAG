@@ -48,7 +48,7 @@ if _pkg_root not in sys.path:
 sys.path.insert(0, str(BASE_DIR / "phase2_retrieval_layer" / "src"))
 sys.path.insert(0, str(BASE_DIR / "phase3_reasoning_guardrails" / "src"))
 
-from .corpus_diagnostics import build_freshness_report
+from .corpus_diagnostics import build_corpus_coverage_report, build_freshness_report
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
@@ -253,6 +253,27 @@ def _log_corpus_freshness_diagnostics() -> None:
             report.get("manifest_embedding_model"),
             report.get("expected_embedding_model"),
         )
+    try:
+        cov = build_corpus_coverage_report(BASE_DIR)
+        logger.info(
+            "Corpus coverage — total_chunks=%s funds=%s holdings_ok=%s ter_ok=%s",
+            cov.get("total_chunks"),
+            len(cov.get("funds") or []),
+            cov.get("funds_with_holdings"),
+            cov.get("funds_with_expense_ratio"),
+        )
+        for fund in cov.get("funds") or []:
+            logger.info(
+                "  fund_coverage name=%r holdings=%s ter=%s nav=%s latest=%s url=%s",
+                fund.get("fund_name"),
+                fund.get("holdings_data_present"),
+                fund.get("expense_ratio_present"),
+                fund.get("nav_present"),
+                fund.get("latest_date_found"),
+                fund.get("source_url"),
+            )
+    except Exception as e:
+        logger.warning("Corpus coverage diagnostics failed: %s", e)
     manifest_ts = report.get("manifest_last_updated")
     chroma_ts = report.get("chroma_sqlite_mtime_utc")
     if manifest_ts and chroma_ts:

@@ -145,7 +145,19 @@ class QueryProcessor:
                 return {}
             best_match, score = result
             if score > 70 and best_match is not None:
-                found_schemes = [best_match]
+                q_tokens = set(re.findall(r"[a-z0-9]+", query_lower)) - self._STOP
+                match_tokens = set(self._fingerprints.get(best_match, []))
+                overlap = len(q_tokens & match_tokens)
+                # Require at least two distinctive token overlaps (avoids "Top 100" → "Nifty Top 20")
+                if overlap >= 2 or (overlap >= 1 and len(match_tokens) == 1):
+                    found_schemes = [best_match]
+                else:
+                    logger.info(
+                        "extract_filters: rejected fuzzy match %r (score=%s overlap=%s)",
+                        best_match,
+                        score,
+                        overlap,
+                    )
 
         if len(found_schemes) == 1:
             return {"scheme_name": found_schemes[0]}

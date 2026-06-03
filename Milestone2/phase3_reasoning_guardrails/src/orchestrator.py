@@ -167,7 +167,7 @@ class RAGOrchestrator:
         topic: Optional[str],
     ) -> List[Dict[str, Any]]:
         """Vector search often misses holdings tables; inject scheme-specific holdings chunks."""
-        if topic not in ("holdings", "equity_exposure"):
+        if topic not in ("holdings", "equity_exposure", "expense_ratio"):
             return results
         scheme = None
         if isinstance(filters, dict):
@@ -176,9 +176,16 @@ class RAGOrchestrator:
                 scheme = sn
         if not scheme:
             return results
+        needle = "Holdings ("
+        if topic == "expense_ratio":
+            needle = "Total Expense Ratio"
         extra = self.retriever.fetch_chunks_matching_text(
-            scheme, "Holdings (", limit=3
+            scheme, needle, limit=3
         )
+        if topic == "expense_ratio" and not extra:
+            extra = self.retriever.fetch_chunks_matching_text(
+                scheme, "Scheme facts for", limit=2
+            )
         if not extra:
             return results
         seen = {r.get("id") for r in results}
