@@ -26,6 +26,7 @@ _MONTHS = {
     "dec": 12,
 }
 _EXPECTED_EMBEDDING = "sentence-transformers/all-MiniLM-L6-v2"
+STALE_NAV_FAIL_DAYS = 7
 
 
 def parse_nav_token(token: str) -> Optional[date]:
@@ -52,7 +53,55 @@ def collect_nav_dates_from_chunks(chunks: List[Dict[str, Any]]) -> Set[date]:
             d = parse_nav_token(m.group(0))
             if d:
                 found.add(d)
+        for bag in (c.get("metadata"), c.get("structured_data")):
+            if isinstance(bag, dict):
+                d = parse_iso_nav_date(bag.get("nav_as_of"))
+                if d:
+                    found.add(d)
     return found
+
+
+def parse_iso_nav_date(raw: Any) -> Optional[date]:
+    if not raw:
+        return None
+    s = str(raw).strip()[:10]
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def collect_nav_dates_from_fetch_manifest(manifest: Dict[str, Any]) -> Set[date]:
+    found: Set[date] = set()
+    for e in manifest.get("entries") or []:
+        if e.get("error"):
+            continue
+        d = parse_iso_nav_date(e.get("nav_as_of"))
+        if d:
+            found.add(d)
+    return found
+
+
+def compute_nav_as_of_max(
+    chunks: List[Dict[str, Any]],
+    fetch_manifest: Optional[Dict[str, Any]] = None,
+) -> Tuple[Optional[date], List[str]]:
+    """Union NAV dates from chunk text, metadata, and fetch_manifest."""
+    sources: List[str] = []
+    found: Set[date] = set()
+    if chunks:
+        from_chunks = collect_nav_dates_from_chunks(chunks)
+        if from_chunks:
+            found |= from_chunks
+            sources.append("chunks")
+    if fetch_manifest:
+        from_fetch = collect_nav_dates_from_fetch_manifest(fetch_manifest)
+        if from_fetch:
+            found |= from_fetch
+            sources.append("fetch_manifest")
+    if not found:
+        return None, sources
+    return max(found), sources
 
 
 def load_manifest(base_dir: Path) -> Optional[Dict[str, Any]]:
@@ -66,25 +115,65 @@ def load_manifest(base_dir: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def load_chunked_nav_dates(base_dir: Path) -> Tuple[Set[date], int]:
+def load_chunked_file(base_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
     path = base_dir / "data" / "processed" / "chunked_data_phase1.4.json"
     if not path.is_file():
-        return set(), 0
+        return [], 0
     try:
         with open(path, encoding="utf-8") as f:
             chunks = json.load(f)
     except (OSError, json.JSONDecodeError):
-        return set(), 0
+        return [], 0
     if not isinstance(chunks, list):
-        return set(), 0
-    return collect_nav_dates_from_chunks(chunks), len(chunks)
+        return [], 0
+    return chunks, len(chunks)
 
 
-def build_freshness_report(base_dir: Path, *, stale_nav_days: int = 7) -> Dict[str, Any]:
+def load_fetch_manifest(base_dir: Path) -> Optional[Dict[str, Any]]:
+    path = base_dir / "data" / "fetch_manifest.json"
+    if not path.is_file():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def load_chunked_nav_dates(base_dir: Path) -> Tuple[Set[date], int]:
+    chunks, count = load_chunked_file(base_dir)
+    if not chunks:
+        return set(), count
+    fetch_manifest = load_fetch_manifest(base_dir)
+    nav_max, _ = compute_nav_as_of_max(chunks, fetch_manifest)
+    found = collect_nav_dates_from_chunks(chunks)
+    if fetch_manifest:
+        found |= collect_nav_dates_from_fetch_manifest(fetch_manifest)
+    return found, count
+
+
+def build_freshness_report(
+    base_dir: Path, *, stale_nav_days: int = STALE_NAV_FAIL_DAYS
+) -> Dict[str, Any]:
     """Summarize manifest, Chroma mtime, and NAV dates found in chunked corpus."""
     base = Path(base_dir).resolve()
     manifest = load_manifest(base) or {}
-    nav_dates, chunk_count = load_chunked_nav_dates(base)
+    chunks, chunk_count = load_chunked_file(base)
+    fetch_manifest = load_fetch_manifest(base)
+    nav_dates: Set[date] = set()
+    nav_date_sources: List[str] = []
+    if chunks:
+        nav_dates |= collect_nav_dates_from_chunks(chunks)
+        if nav_dates:
+            nav_date_sources.append("chunks")
+    if fetch_manifest:
+        fm_dates = collect_nav_dates_from_fetch_manifest(fetch_manifest)
+        if fm_dates:
+            nav_dates |= fm_dates
+            nav_date_sources.append("fetch_manifest")
+    nav_max_combined, combined_sources = compute_nav_as_of_max(chunks, fetch_manifest)
+    if combined_sources:
+        nav_date_sources = combined_sources
     idx = base / "data" / "indexed" / "chroma.sqlite3"
 
     chroma_mtime: Optional[str] = None
@@ -125,4 +214,6 @@ def build_freshness_report(base_dir: Path, *, stale_nav_days: int = 7) -> Dict[s
         "nav_age_days": nav_age_days,
         "nav_stale_warning": nav_stale,
         "stale_nav_threshold_days": stale_nav_days,
+        "nav_date_sources": nav_date_sources,
+        "nav_as_of_max_combined": nav_max_combined.isoformat() if nav_max_combined else None,
     }

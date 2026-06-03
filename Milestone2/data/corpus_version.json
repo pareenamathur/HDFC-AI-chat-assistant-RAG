@@ -1,6 +1,6 @@
 {
-  "version": "corpus-v2026.06.01",
-  "last_updated": "2026-06-01T20:48:57Z",
+  "version": "corpus-v2026.06.03",
+  "last_updated": "2026-06-03T07:59:21Z",
   "phases_run": [
     "1.1",
     "1.2",
@@ -8,16 +8,17 @@
     "1.4",
     "rebuild_chroma"
   ],
-  "source": "github_actions_refresh",
+  "source": "local_refresh",
   "chunks_total": 417,
   "schemes_count": 15,
   "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
   "vector_store": "ChromaDB",
   "collection_name": "mf_faq_corpus",
   "nav_as_of_dates": [
-    "2026-05-14"
+    "2026-05-14",
+    "2026-06-02"
   ],
-  "nav_as_of_max": "2026-05-14",
+  "nav_as_of_max": "2026-06-02",
   "fetch_stats": {
     "urls_total": 15,
     "urls_ok": 15,

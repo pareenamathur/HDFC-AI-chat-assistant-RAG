@@ -19,7 +19,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from backend.corpus_diagnostics import collect_nav_dates_from_chunks  # noqa: E402
+from backend.corpus_diagnostics import (  # noqa: E402
+    STALE_NAV_FAIL_DAYS,
+    collect_nav_dates_from_chunks,
+    collect_nav_dates_from_fetch_manifest,
+    load_fetch_manifest,
+)
 
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -70,7 +75,11 @@ def _write_manifest() -> None:
                 sn = (c.get("scheme_name") or (c.get("metadata") or {}).get("scheme_name") or "")
                 if sn:
                     schemes.add(str(sn))
-            nav_sorted = sorted(collect_nav_dates_from_chunks(data))
+            fetch_manifest = load_fetch_manifest(ROOT)
+            nav_dates_set = collect_nav_dates_from_chunks(data)
+            if fetch_manifest:
+                nav_dates_set |= collect_nav_dates_from_fetch_manifest(fetch_manifest)
+            nav_sorted = sorted(nav_dates_set)
             nav_dates = [d.isoformat() for d in nav_sorted]
 
     manifest = {
@@ -123,6 +132,16 @@ def main() -> int:
         raise RuntimeError("rebuild_chroma_from_chunks.py failed")
 
     _write_manifest()
+
+    from backend.corpus_diagnostics import build_freshness_report  # noqa: E402
+
+    report = build_freshness_report(ROOT, stale_nav_days=STALE_NAV_FAIL_DAYS)
+    if report.get("nav_stale_warning"):
+        raise RuntimeError(
+            f"NAV freshness check failed: newest NAV is {report.get('nav_age_days')} days old "
+            f"(max allowed {STALE_NAV_FAIL_DAYS}). nav_as_of_max={report.get('nav_as_of_max')}"
+        )
+
     print("\nCorpus refresh complete.", flush=True)
     return 0
 

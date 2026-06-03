@@ -14,11 +14,12 @@ FETCH_MANIFEST = ROOT / "data" / "fetch_manifest.json"
 CHUNKED = ROOT / "data" / "processed" / "chunked_data_phase1.4.json"
 CHROMA = ROOT / "data" / "indexed" / "chroma.sqlite3"
 _NAV_RE = re.compile(r"NAV:\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2}\b", re.I)
-_STALE_NAV_DAYS = 5
 _MAX_FETCH_FAIL_PCT = 20.0
 
 sys.path.insert(0, str(ROOT))
-from backend.corpus_diagnostics import build_freshness_report  # noqa: E402
+from backend.corpus_diagnostics import STALE_NAV_FAIL_DAYS, build_freshness_report  # noqa: E402
+
+_STALE_NAV_DAYS = STALE_NAV_FAIL_DAYS
 
 
 def _check_fetch_manifest() -> tuple[bool, list[str]]:
@@ -107,12 +108,13 @@ def main() -> int:
         ok = False
     if report.get("nav_stale_warning"):
         print(
-            "WARN: newest NAV in corpus is",
+            "FAIL: newest NAV in corpus is",
             report.get("nav_age_days"),
             "days old (threshold",
             report.get("stale_nav_threshold_days"),
-            ") — check Groww source or fetch_manifest",
+            ") — check Groww/AMFI fetch_manifest",
         )
+        ok = False
     today = datetime.now(timezone.utc).date()
     print("validation_date_utc:", today.isoformat())
     return 0 if ok else 1

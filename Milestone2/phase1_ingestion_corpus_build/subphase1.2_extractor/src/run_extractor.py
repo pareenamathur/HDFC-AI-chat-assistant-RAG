@@ -16,6 +16,7 @@ MILESTONE2_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = MILESTONE2_ROOT / "data"
 sys.path.insert(0, str(MILESTONE2_ROOT / "phase1_ingestion_corpus_build" / "subphase1.1_fetcher" / "src"))
 
+from amfi_nav import apply_fetch_manifest_nav
 from fetch_manifest import load_manifest, url_for_html_file
 from html_extractor import HTMLExtractor
 
@@ -31,11 +32,12 @@ def main() -> int:
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = load_manifest(DATA_DIR)
-    manifest_files = {
-        e.get("html_file")
+    manifest_by_html = {
+        e.get("html_file"): e
         for e in (manifest.get("entries") or [])
         if e.get("html_file") and not e.get("error")
     }
+    manifest_files = set(manifest_by_html.keys())
     if manifest_files:
         html_files = [html_dir / name for name in sorted(manifest_files) if (html_dir / name).is_file()]
     else:
@@ -50,6 +52,26 @@ def main() -> int:
             page_url = url_for_html_file(DATA_DIR, html_file.name) or ""
             result = extractor.extract_html(html_content, page_url or str(html_file))
             sd = dict(result.structured_data or {})
+            mentry = manifest_by_html.get(html_file.name)
+            if mentry:
+                from groww_parser import parse_groww_mf_page, format_nav_corpus_line
+
+                groww = parse_groww_mf_page(html_content, page_url or "")
+                merged = apply_fetch_manifest_nav(groww, mentry)
+                if merged.get("nav_as_of"):
+                    sd["nav_as_of"] = merged["nav_as_of"]
+                if merged.get("nav"):
+                    sd["nav"] = str(merged["nav"])
+                if merged.get("nav_date_raw"):
+                    sd["nav_date"] = merged["nav_date_raw"]
+                if merged.get("nav_date_display"):
+                    sd["nav_date_display"] = merged["nav_date_display"]
+                if merged.get("nav_source"):
+                    sd["nav_source"] = merged["nav_source"]
+                prefix = format_nav_corpus_line(merged)
+                body = result.text
+                if prefix and not body.startswith(prefix[:40]):
+                    result.text = prefix + "\n\n" + body
             if page_url:
                 sd["page_url"] = page_url
 

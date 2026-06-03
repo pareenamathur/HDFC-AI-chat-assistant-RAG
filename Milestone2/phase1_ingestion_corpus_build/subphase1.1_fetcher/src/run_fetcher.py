@@ -21,10 +21,13 @@ sys.path.insert(
     ),
 )
 
+from amfi_nav import fetch_latest_amfi_nav, load_amfi_scheme_codes, merge_nav_sources
 from config import ConfigManager, get_config
 from fetch_manifest import save_manifest
 from groww_parser import parse_groww_mf_page
 from web_scraper import WebScraper
+
+NAV_STALE_FAIL_DAYS = 7
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,6 +77,7 @@ def main() -> int:
     ok_count = 0
     stale_count = 0
     today = datetime.now(timezone.utc).date()
+    amfi_codes = load_amfi_scheme_codes()
 
     for i, entry in enumerate(url_entries):
         url = entry["url"]
@@ -98,10 +102,17 @@ def main() -> int:
             "extraction_error": None,
             "nav_stale": False,
             "nav_age_days": None,
+            "nav_source": None,
+            "amfi_scheme_code": amfi_codes.get(name),
         }
 
         if result.html and not result.error:
             groww = parse_groww_mf_page(result.html, url)
+            amfi = None
+            code = amfi_codes.get(name)
+            if code:
+                amfi = fetch_latest_amfi_nav(code)
+            groww, nav_source = merge_nav_sources(groww, amfi)
             scheme = groww.get("scheme_name") or result.scheme_name or name
             fname = f"{_safe_filename(scheme)}.html"
             filepath = html_output_dir / fname
@@ -114,12 +125,13 @@ def main() -> int:
             row["nav_date_raw"] = groww.get("nav_date_raw")
             row["extraction_ok"] = groww.get("extraction_ok")
             row["extraction_error"] = groww.get("extraction_error")
+            row["nav_source"] = nav_source
             if groww.get("nav_as_of"):
                 try:
                     nav_d = datetime.strptime(groww["nav_as_of"], "%Y-%m-%d").date()
                     age = (today - nav_d).days
                     row["nav_age_days"] = age
-                    row["nav_stale"] = age > 3
+                    row["nav_stale"] = age > NAV_STALE_FAIL_DAYS
                     if row["nav_stale"]:
                         stale_count += 1
                 except ValueError:
@@ -154,6 +166,31 @@ def main() -> int:
 
     if ok_count == 0:
         return 1
+
+    nav_dates = [
+        datetime.strptime(e["nav_as_of"], "%Y-%m-%d").date()
+        for e in manifest_entries
+        if e.get("nav_as_of") and not e.get("error")
+    ]
+    if nav_dates:
+        max_age = (today - max(nav_dates)).days
+        logger.info(
+            "NAV as-of max=%s age_days=%s threshold=%s",
+            max(nav_dates).isoformat(),
+            max_age,
+            NAV_STALE_FAIL_DAYS,
+        )
+        if max_age > NAV_STALE_FAIL_DAYS:
+            logger.error(
+                "Newest NAV is %s days old (>%s) — AMFI/Groww sources not current",
+                max_age,
+                NAV_STALE_FAIL_DAYS,
+            )
+            return 1
+    elif ok_count:
+        logger.error("Fetched pages but no NAV as-of dates extracted")
+        return 1
+
     return 0
 
 

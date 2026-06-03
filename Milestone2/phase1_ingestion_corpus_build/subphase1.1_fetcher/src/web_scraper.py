@@ -57,6 +57,8 @@ class WebScraper:
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
         }
         self.session = requests.Session()
         self.session.headers.update(self.headers)

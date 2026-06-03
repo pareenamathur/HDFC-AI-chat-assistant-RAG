@@ -13,9 +13,42 @@ sys.path.insert(0, os.path.dirname(__file__))
 from data_cleaner import DataCleaner
 from metadata_tagger import MetadataTagger
 import logging
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parents[2] / "subphase1.2_extractor" / "src"),
+)
+from groww_parser import format_nav_corpus_line  # noqa: E402
+
+
+def _reinject_canonical_nav_line(
+    text: str, scheme_name: str, metadata: dict
+) -> str:
+    """Prepend parser canonical NAV line so chunk regex + retrieval see freshest as-of."""
+    nav = metadata.get("nav")
+    nav_as_of = metadata.get("nav_as_of")
+    if not nav or not nav_as_of:
+        return text
+    disp = metadata.get("nav_date_display")
+    if not disp:
+        try:
+            d = datetime.strptime(str(nav_as_of)[:10], "%Y-%m-%d").date()
+            disp = d.strftime("%d %b %y")
+        except ValueError:
+            return text
+    prefix = format_nav_corpus_line(
+        {"scheme_name": scheme_name, "nav": str(nav), "nav_date_display": disp}
+    )
+    if not prefix:
+        return text
+    stripped = text.lstrip()
+    if stripped.startswith(prefix[: min(len(prefix), 48)]):
+        return text
+    return prefix + "\n\n" + text
 
 
 def main():
@@ -55,9 +88,13 @@ def main():
             
             # Normalize dates
             final_text = cleaner.normalize_dates(final_text)
-            
+
             # Clean metadata
             cleaned_metadata = cleaner.clean_metadata(doc.get('structured_data', {}))
+
+            final_text = _reinject_canonical_nav_line(
+                final_text, doc["scheme_name"], cleaned_metadata
+            )
             
             page_url = doc.get('source_url') or doc.get('filename', '')
             cleaned_metadata = dict(cleaned_metadata)

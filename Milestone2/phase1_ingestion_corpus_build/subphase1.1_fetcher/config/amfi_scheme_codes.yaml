@@ -1,0 +1,17 @@
+# AMFI scheme codes (mfapi.in / AMFI daily NAV publication). Keys match urls.yaml "name".
+schemes:
+  HDFC Balanced Advantage Fund: 118968
+  HDFC BSE Sensex Index Fund: 119065
+  HDFC Corporate Bond Fund: 118987
+  HDFC Flexi Cap Fund: 118955
+  HDFC Gold ETF Fund of Fund: 119132
+  HDFC Hybrid Debt Fund: 119118
+  HDFC Mid Cap Fund: 118989
+  HDFC Multi Cap Fund: 149368
+  HDFC Nifty50 Equal Weight Index Fund: 149107
+  HDFC Nifty 50 Index Fund: 119063
+  HDFC Nifty Top 20 Equal Weight Index Fund: 153405
+  HDFC Pharma and Healthcare Fund: 152082
+  HDFC Short Term Debt Fund: 119016
+  HDFC Silver ETF FOF: 150737
+  HDFC Small Cap Fund: 130503
