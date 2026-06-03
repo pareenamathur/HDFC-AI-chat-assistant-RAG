@@ -66,7 +66,6 @@ export function MessageList({ messages }: Props) {
                   sources={message.sources}
                   source={message.source}
                   source_link={message.source_link}
-                  last_updated={message.last_updated}
                 />
               )}
             </div>
