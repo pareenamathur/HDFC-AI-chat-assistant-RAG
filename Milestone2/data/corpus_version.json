@@ -1,6 +1,6 @@
 {
-  "version": "corpus-v2026.07.01",
-  "last_updated": "2026-07-01T08:38:58Z",
+  "version": "corpus-v2026.08.01",
+  "last_updated": "2026-08-01T07:04:15Z",
   "phases_run": [
     "1.1",
     "1.2",
@@ -16,9 +16,9 @@
   "collection_name": "mf_faq_corpus",
   "nav_as_of_dates": [
     "2026-05-14",
-    "2026-06-30"
+    "2026-07-31"
   ],
-  "nav_as_of_max": "2026-06-30",
+  "nav_as_of_max": "2026-07-31",
   "fetch_stats": {
     "urls_total": 15,
     "urls_ok": 15,
